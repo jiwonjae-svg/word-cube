@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <title>Word Puzzle Master</title>
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Phaser.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <!-- Header UI -->
+    <div id="header">
+        <div id="leaderboard-container">
+            <h3>🏆 Global Leaderboard</h3>
+            <div id="leaderboard-list">
+                <div class="loading">Loading...</div>
+            </div>
+        </div>
+        
+        <div id="auth-container">
+            <button id="google-login-btn" class="btn-primary">
+                <span class="icon">🔐</span>
+                Google Login
+            </button>
+            <div id="user-info" style="display: none;">
+                <img id="user-avatar" src="" alt="User">
+                <span id="user-name"></span>
+                <button id="logout-btn" class="btn-secondary">Logout</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Game Container -->
+    <div id="game-container"></div>
+    
+    <!-- Side Panel - Word List -->
+    <div id="word-list-panel">
+        <h3>찾아야 할 단어</h3>
+        <div id="words-to-find">
+            <div class="loading">Starting game...</div>
+        </div>
+        <div id="score-info">
+            <div class="score-item">
+                <span class="label">Score:</span>
+                <span id="current-score">0</span>
+            </div>
+            <div class="score-item">
+                <span class="label">Multiplier:</span>
+                <span id="multiplier">1.00x</span>
+            </div>
+            <div class="score-item">
+                <span class="label">Found:</span>
+                <span id="found-count">0/10</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scripts -->
+    <script src="cordova.js"></script> <!-- Cordova runtime (자동 주입됨) -->
+    <script src="js/cordova-init.js"></script>
+    <script src="js/firebase-config.js"></script>
+    <script src="js/WordGenerator.js"></script>
+    <script src="js/GameScene.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

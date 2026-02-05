@@ -1,0 +1,55 @@
+{
+  "name": "word-puzzle-master",
+  "version": "1.0.0",
+  "description": "Phaser.js 기반의 실시간 단어 퍼즐 웹게임",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -p 8000 -o",
+    "dev": "npx http-server -p 8000",
+    "cordova:add:android": "cordova platform add android",
+    "cordova:add:ios": "cordova platform add ios",
+    "cordova:build:android": "cordova build android",
+    "cordova:build:ios": "cordova build ios",
+    "cordova:run:android": "cordova run android",
+    "cordova:run:ios": "cordova run ios",
+    "cordova:prepare": "cordova prepare"
+  },
+  "keywords": [
+    "phaser",
+    "game",
+    "puzzle",
+    "word-game",
+    "firebase",
+    "cordova",
+    "mobile-game"
+  ],
+  "author": "Word Puzzle Team",
+  "license": "MIT",
+  "devDependencies": {
+    "cordova": "^12.0.0",
+    "http-server": "^14.1.1"
+  },
+  "cordova": {
+    "platforms": [
+      "android",
+      "ios"
+    ],
+    "plugins": {
+      "cordova-plugin-whitelist": {},
+      "cordova-plugin-statusbar": {},
+      "cordova-plugin-device": {},
+      "cordova-plugin-network-information": {},
+      "cordova-plugin-inappbrowser": {},
+      "cordova-plugin-vibration": {},
+      "cordova-plugin-splashscreen": {}
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/word-puzzle-master.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/word-puzzle-master/issues"
+  },
+  "homepage": "https://github.com/yourusername/word-puzzle-master#readme"
+}
