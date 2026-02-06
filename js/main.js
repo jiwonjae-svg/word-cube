@@ -405,19 +405,35 @@ function updateScoreUI() {
  * 단어 리스트 UI 업데이트
  */
 function updateWordListUI(words) {
+    console.log('📝 updateWordListUI 호출됨:', words);
     const container = document.getElementById('words-to-find');
-    if (!container) return;
+    if (!container) {
+        console.error('❌ words-to-find 컨테이너를 찾을 수 없음!');
+        return;
+    }
+    
+    if (!words || words.length === 0) {
+        console.error('❌ 단어 리스트가 비어있음!');
+        container.innerHTML = '<div class="loading">단어를 불러올 수 없습니다</div>';
+        return;
+    }
 
     container.innerHTML = '';
     
-    words.forEach(word => {
+    words.forEach((word, index) => {
         const wordElement = document.createElement('div');
         wordElement.className = 'word-item';
         wordElement.textContent = word;
         wordElement.dataset.word = word;
         container.appendChild(wordElement);
+        console.log(`✅ 단어 ${index + 1}/${words.length} 추가: ${word}`);
     });
+    
+    console.log(`✅ updateWordListUI 완료: ${words.length}개 단어 표시됨`);
 }
+
+// 전역 스코프에 명시적으로 할당 (Phaser Scene에서 접근 가능)
+window.updateWordListUI = updateWordListUI;
 
 /**
  * 단어 찾았을 때 UI 업데이트
