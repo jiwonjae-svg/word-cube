@@ -660,7 +660,9 @@ Activity = false;
      * ==========================================
      */
     handleWordFound(word) {
-        const currentTime = Date.now();\n        \n        this.foundWords.add(word);
+        const currentTime = Date.now();
+        
+        this.foundWords.add(word);
         
         // 선택된 셀들을 찾은 단어로 표시
         this.selectedCells.forEach(cellData => {
