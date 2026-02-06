@@ -37,6 +37,7 @@ const gameState = {
     score: 0,
     multiplier: 1.0,
     foundWords: [],
+    timeLeft: 180,
     isGameActive: false,
     currentUser: null
 };
@@ -44,34 +45,140 @@ const gameState = {
 // Phaser 게임 인스턴스 생성
 let game;
 
-// DOM이 로드된 후 게임 시작
-window.addEventListener('DOMContentLoaded', () => {
-    // Firebase 초기화 확인
-    if (typeof initializeFirebase !== 'undefined') {
-        initializeFirebase();
+/**
+ * Grid 컨테이너 크기 계산 및 적용
+ * CSS Grid의 중앙 셀 크기를 Phaser가 인식할 수 있도록 명시적으로 설정
+ */
+function calculateGameContainerSize() {
+    const gameContainer = document.getElementById('game-container');
+    if (!gameContainer) return;
+    
+    // Grid 중앙 셀의 사용 가능한 공간 계산
+    const mainArea = document.querySelector('.game-main-area');
+    if (mainArea) {
+        const mainRect = mainArea.getBoundingClientRect();
+        const leftPanel = document.querySelector('.left-panel');
+        const rightPanel = document.querySelector('.right-panel');
+        
+        // 패널 너비 + gap 계산
+        const leftWidth = leftPanel ? leftPanel.offsetWidth : 260;
+        const rightWidth = rightPanel ? rightPanel.offsetWidth : 280;
+        const gap = 32; // var(--spacing-xl) 기본값
+        
+        // 사용 가능한 너비/높이
+        const availableWidth = mainRect.width - leftWidth - rightWidth - (gap * 2);
+        const availableHeight = mainRect.height - 48; // 상하 padding
+        
+        // 정사각형 유지 (작은 쪽에 맞춤)
+        const size = Math.min(availableWidth, availableHeight, 800);
+        
+        // 컨테이너 크기 명시적 설정
+        gameContainer.style.width = `${size}px`;
+        gameContainer.style.height = `${size}px`;
+        
+        console.log(`📐 Game container size calculated: ${size}x${size}px`);
+    }
+}
+
+// DOM이 로드된 후 게임 즉시 시작 (NO LOGIN)
+window.addEventListener('DOMContentLoaded', async () => {
+    console.log('🎮 Starting game instantly...');
+    
+    // 게임 화면 즉시 활성화
+    const gameScreen = document.getElementById('game-screen');
+    if (gameScreen) {
+        gameScreen.classList.add('active');
     }
 
+    // 컨테이너 크기 계산
+    calculateGameContainerSize();
+
+    // Asset Preload: 폰트 로딩 대기
+    await document.fonts.ready;
+    console.log('✅ 폰트 로딩 완료');
+
+    // 오늘의 단어 목록 로드 (선택 사항)
+    // Firebase에서 단어 목록을 가져옴 (getTodaysWords 함수 사용)
+    // WordGenerator가 자체적으로 단어를 생성하므로 선택 사항
+    
     // Phaser 게임 생성
     game = new Phaser.Game(gameConfig);
+    console.log('🎮 Phaser 게임 인스턴스 생성 완료');
 
-    // UI 이벤트 리스너 설정
-    setupUIListeners();
+    // 푸터 상태 초기화
+    updateFooterStatus();
+    
+    // 커스텀 이벤트 리스너 등록
+    setupEventListeners();
+    
+    // 실시간 리더보드 구독
+    if (typeof subscribeToLeaderboard === 'function') {
+        subscribeToLeaderboard(updateLeaderboardUI);
+    }
+    
+    console.log('✅ Game started!');
+});
+
+// 창 크기 변경 시 재계산
+window.addEventListener('resize', () => {
+    calculateGameContainerSize();
+    if (game && game.scale) {
+        game.scale.refresh();
+    }
 });
 
 /**
- * UI 이벤트 리스너 설정
+ * 푸터 상태 업데이트
  */
-function setupUIListeners() {
-    // 구글 로그인 버튼
-    const loginBtn = document.getElementById('google-login-btn');
-    if (loginBtn) {
-        loginBtn.addEventListener('click', handleGoogleLogin);
+function updateFooterStatus() {
+    // 현재 점수
+    const footerScore = document.getElementById('footer-score');
+    if (footerScore) {
+        footerScore.textContent = Math.floor(gameState.score).toLocaleString();
     }
-
-    // 로그아웃 버튼
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', handleLogout);
+    
+    // 배수
+    const footerMultiplier = document.getElementById('footer-multiplier');
+    if (footerMultiplier) {
+        footerMultiplier.textContent = `${gameState.multiplier.toFixed(2)}x`;
+    }
+    
+    // Multiplier 게이지 업데이트
+    const multiplierGaugeFill = document.getElementById('multiplier-gauge-fill');
+    if (multiplierGaugeFill) {
+        const multiplierPercent = ((gameState.multiplier - 1.0) / 2.0) * 100; // 1.0~3.0 → 0~100%
+        const clampedPercent = Math.max(0, Math.min(100, multiplierPercent));
+        multiplierGaugeFill.style.width = `${clampedPercent}%`;
+        
+        // 색상 변화 (1.0에 가까울수록 붉은색)
+        if (gameState.multiplier <= 1.2) {
+            multiplierGaugeFill.style.backgroundColor = '#ef4444'; // Red
+        } else if (gameState.multiplier <= 1.8) {
+            multiplierGaugeFill.style.backgroundColor = '#f59e0b'; // Orange
+        } else {
+            multiplierGaugeFill.style.backgroundColor = '#10b981'; // Green
+        }
+    }
+    
+    // 찾은 단어
+    const footerFound = document.getElementById('footer-found');
+    if (footerFound) {
+        footerFound.textContent = `${gameState.foundWords.length}/10`;
+    }
+    
+    // 남은 시간 (타이머)
+    const footerTime = document.getElementById('footer-time');
+    if (footerTime && gameState.timeLeft !== undefined) {
+        const minutes = Math.floor(gameState.timeLeft / 60);
+        const seconds = Math.floor(gameState.timeLeft % 60);
+        footerTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+    
+    // 최고 기록
+    const footerHighScore = document.getElementById('footer-high-score');
+    if (footerHighScore) {
+        const highScore = localStorage.getItem('highScore') || '0';
+        footerHighScore.textContent = parseInt(highScore).toLocaleString();
     }
 }
 
@@ -151,6 +258,15 @@ function updateScoreUI() {
     if (foundCountElement) {
         foundCountElement.textContent = `${gameState.foundWords.length}/10`;
     }
+    
+    // 푸터 상태도 함께 업데이트
+    updateFooterStatus();
+    
+    // 최고 점수 업데이트
+    const currentHighScore = parseInt(localStorage.getItem('highScore') || '0');
+    if (gameState.score > currentHighScore) {
+        localStorage.setItem('highScore', Math.floor(gameState.score).toString());
+    }
 }
 
 /**
@@ -181,6 +297,77 @@ function markWordAsFound(word) {
             element.classList.add('found');
         }
     });
+}
+
+/**
+ * ============================================
+ * 커스텀 이벤트 리스너 설정
+ * ============================================
+ */
+function setupEventListeners() {
+    // 단어 발견 이벤트
+    window.addEventListener('wordFound', (event) => {
+        const { word, score, points, multiplier, foundCount } = event.detail;
+        console.log(`🎉 단어 발견 이벤트: ${word} (+${points}점)`);
+        
+        // 점수 판널에 피드백 표시 (선택 사항)
+        showScoreFeedback(points, multiplier);
+    });
+    
+    // 게임 종료 이벤트
+    window.addEventListener('gameEnd', (event) => {
+        const { score, foundWords, timeElapsed, reason } = event.detail;
+        console.log(`🏁 게임 종료: ${reason}`);
+        
+        // 결과 화면 표시
+        showGameEndScreen(score, foundWords, timeElapsed, reason);
+    });
+}
+
+/**
+ * 점수 피드백 표시
+ */
+function showScoreFeedback(points, multiplier) {
+    // 간단한 토스트 메시지 (선택 사항)
+    console.log(`+${points} (×${multiplier.toFixed(2)})`);
+}
+
+/**
+ * 게임 종료 화면 표시
+ */
+function showGameEndScreen(score, foundWords, timeElapsed, reason) {
+    // 간단한 alert (나중에 모달로 교체 가능)
+    const message = `게임 종료!\n\n최종 점수: ${score.toLocaleString()}\n찾은 단어: ${foundWords}개\n소요 시간: ${Math.floor(timeElapsed / 60)}분 ${Math.floor(timeElapsed % 60)}초`;
+    alert(message);
+}
+
+/**
+ * 리더보드 UI 업데이트
+ */
+function updateLeaderboardUI(leaderboard) {
+    const container = document.getElementById('leaderboard-list');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    leaderboard.forEach((entry, index) => {
+        const rank = index + 1;
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'leaderboard-item';
+        if (rank <= 3) {
+            itemDiv.classList.add(`rank-${rank}`);
+        }
+        
+        itemDiv.innerHTML = `
+            <span class="rank">${rank}</span>
+            <span class="player-name">${entry.userName || 'Anonymous'}</span>
+            <span class="score">${entry.score.toLocaleString()}</span>
+        `;
+        
+        container.appendChild(itemDiv);
+    });
+    
+    console.log('📊 리더보드 UI 업데이트 완료');
 }
 
 /**
