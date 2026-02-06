@@ -151,18 +151,8 @@
     </div>
     
     <!-- Scripts -->
-    <!-- Cordova (모바일 앱에서만 로드, 브라우저에서는 404 무시) -->
-    <script>
-        // Cordova.js를 동적으로 로드 (브라우저에서 404 에러 방지)
-        (function() {
-            const script = document.createElement('script');
-            script.src = 'cordova.js';
-            script.onerror = function() {
-                console.log('🌐 브라우저 모드: Cordova 없음 (정상)');
-            };
-            document.head.appendChild(script);
-        })();
-    </script>
+    <!-- Cordova.js는 Cordova 빌드 시 자동 주입되므로 여기서는 제거 -->
+    <!-- 브라우저 환경에서는 cordova-init.js가 자동으로 감지하고 스킵 -->
     <script src="js/cordova-init.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/WordGenerator.js"></script>

@@ -187,6 +187,19 @@ window.addEventListener('DOMContentLoaded', async () => {
         game = new Phaser.Game(gameConfig);
         console.log('🎮 Phaser 게임 인스턴스 생성 완료');
         console.log('🎮 게임 객체:', game);
+        console.log('🎮 Canvas 확인:', {
+            canvas: game.canvas,
+            canvasExists: !!game.canvas,
+            canvasParent: game.canvas ? game.canvas.parentElement : null,
+            canvasSize: game.canvas ? `${game.canvas.width}x${game.canvas.height}` : 'N/A'
+        });
+        
+        // Canvas가 제대로 생성되었는지 확인
+        if (!game.canvas) {
+            console.error('❌ Canvas가 생성되지 않았습니다!');
+            alert('Canvas 생성 실패. 페이지를 새로고침하세요.');
+            return;
+        }
     } catch (err) {
         console.error('❌ Phaser 게임 생성 실패:', err);
         alert('Phaser 게임 생성 실패: ' + err.message);
