@@ -65,12 +65,22 @@ Activity = false;
 
     create() {
         console.log('🎬 GameScene.create() 시작');
+        console.log('📦 gameState 확인:', {
+            hasDefaultWordList: !!gameState.defaultWordList,
+            wordCount: gameState.defaultWordList ? gameState.defaultWordList.length : 0,
+            words: gameState.defaultWordList
+        });
         
         // 배경 설정 (어두운 네이비로 변경)
         this.cameras.main.setBackgroundColor('#1e293b');
         
-        // 단어 생성기 초기화
-        this.wordGenerator = new WordGenerator(this.gridSize);
+        // CRITICAL: 데이터 동기화 보장
+        // gameState에서 로드된 단어 리스트를 WordGenerator에 전달
+        const wordListToUse = gameState.defaultWordList || DEFAULT_WORD_LIST;
+        console.log('🎯 사용할 단어 리스트:', wordListToUse);
+        
+        // 단어 생성기 초기화 (데이터 전달)
+        this.wordGenerator = new WordGenerator(this.gridSize, wordListToUse);
         
         // 그리드 생성 (방어 코드 포함)
         let generatedData;
@@ -81,7 +91,7 @@ Activity = false;
             console.error('❌ 그리드 생성 실패:', err);
             // 긴급 폴백: 빈 그리드 생성
             this.wordGenerator.createEmptyGrid();
-            this.wordGenerator.words = gameState.defaultWordList || DEFAULT_WORD_LIST;
+            this.wordGenerator.words = wordListToUse;
             this.wordGenerator.fillEmptySpaces();
             generatedData = {
                 grid: this.wordGenerator.grid,

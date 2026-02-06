@@ -5,12 +5,20 @@
  * ============================================
  */
 class WordGenerator {
-    constructor(gridSize = 12) {
+    constructor(gridSize = 12, customWordList = null) {
         this.gridSize = gridSize;
         this.grid = [];
         this.words = [];
         this.placedWords = [];
         this.excludedZones = []; // 가려진 영역 정보
+        
+        // 커스텀 단어 리스트 지원 (데이터 동기화 보장)
+        this.customWordList = customWordList;
+        console.log('🔧 WordGenerator 초기화:', {
+            gridSize,
+            hasCustomWords: !!customWordList,
+            customWordsCount: customWordList ? customWordList.length : 0
+        });
     }
 
     /**
@@ -34,10 +42,20 @@ class WordGenerator {
     }
 
     /**
-     * 랜덤으로 10개의 단어 선택
+     * 랜덤으로 10개의 단어 선택 (커스텀 리스트 우선)
      */
     selectRandomWords(count = 10) {
-        const wordList = this.getWordList();
+        // 커스텀 단어 리스트가 있으면 우선 사용 (데이터 동기화)
+        const wordList = this.customWordList && this.customWordList.length >= count
+            ? this.customWordList
+            : this.getWordList();
+        
+        console.log('📝 단어 선택:', {
+            source: this.customWordList ? 'Custom (gameState)' : 'Default (getWordList)',
+            totalAvailable: wordList.length,
+            selecting: count
+        });
+        
         const shuffled = wordList.sort(() => 0.5 - Math.random());
         this.words = shuffled.slice(0, count);
         return this.words;
@@ -227,16 +245,38 @@ class WordGenerator {
      * ==========================================
      */
     generateGrid() {
-        this.selectRandomWords(10); // 10개로 고정
-        this.createEmptyGrid();
-        this.placeAllWords();
-        this.fillEmptySpaces();
+        console.log('🎲 그리드 생성 시작...');
         
-        return {
+        // CRITICAL: 단어 선택 전 검증
+        const selectedWords = this.selectRandomWords(10);
+        if (!selectedWords || selectedWords.length === 0) {
+            throw new Error('❌ 단어 선택 실패: 사용 가능한 단어가 없습니다');
+        }
+        
+        console.log('✅ 단어 선택 완료:', selectedWords);
+        
+        this.createEmptyGrid();
+        console.log('✅ 빈 그리드 생성 완료');
+        
+        this.placeAllWords();
+        console.log('✅ 단어 배치 완료');
+        
+        this.fillEmptySpaces();
+        console.log('✅ 빈 공간 채우기 완료');
+        
+        const result = {
             grid: this.grid,
             words: this.words,
             placedWords: this.placedWords
         };
+        
+        console.log('🎉 그리드 생성 완료:', {
+            gridSize: this.gridSize,
+            totalWords: result.words.length,
+            placedWords: result.placedWords.length
+        });
+        
+        return result;
     }
 
     /**

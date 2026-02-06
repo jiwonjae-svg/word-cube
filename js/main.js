@@ -89,6 +89,8 @@ function calculateGameContainerSize() {
 // DOM이 로드된 후 게임 즉시 시작 (NO LOGIN)
 window.addEventListener('DOMContentLoaded', async () => {
     console.log('🎮 Starting game instantly...');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📋 초기화 단계 1: DOM 준비');
     
     // 게임 화면 즉시 활성화
     const gameScreen = document.getElementById('game-screen');
@@ -96,6 +98,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         gameScreen.classList.add('active');
     }
 
+    console.log('📋 초기화 단계 2: 컨테이너 크기 설정');
     // 컨테이너 크기 계산
     calculateGameContainerSize();
     
@@ -109,8 +112,14 @@ window.addEventListener('DOMContentLoaded', async () => {
             container.style.height = '800px';
             container.style.minHeight = '600px';
         }
+    } else {
+        console.log('✅ 컨테이너 크기:', {
+            width: container.offsetWidth,
+            height: container.offsetHeight
+        });
     }
 
+    console.log('📋 초기화 단계 3: Asset Preload (폰트)');
     // Asset Preload: 폰트 로딩 대기
     try {
         await document.fonts.ready;
@@ -119,26 +128,42 @@ window.addEventListener('DOMContentLoaded', async () => {
         console.warn('⚠️ 폰트 로딩 실패, 계속 진행:', err);
     }
 
-    // 오늘의 단어 목록 로드 (폴백 포함)
-    let wordList = DEFAULT_WORD_LIST;
+    console.log('📋 초기화 단계 4: 데이터 로딩 (CRITICAL)');
+    // CRITICAL: 데이터 동기화 보장
+    // Firebase 데이터를 완전히 로드한 후에만 Phaser 생성
+    let wordList = [...DEFAULT_WORD_LIST]; // 방어적 복사
+    console.log('🔹 기본 단어 리스트 준비:', wordList);
+    
     if (typeof getTodaysWords === 'function') {
         try {
+            console.log('🔄 Firebase에서 단어 로드 시도...');
             const fetchedWords = await getTodaysWords();
             if (fetchedWords && fetchedWords.length >= 10) {
                 wordList = fetchedWords;
-                console.log('✅ 서버에서 단어 로드 완료');
+                console.log('✅ 서버에서 단어 로드 완료:', fetchedWords);
+            } else {
+                console.warn('⚠️ 서버 단어 부족, 기본 단어 사용');
             }
         } catch (err) {
             console.warn('⚠️ 서버 단어 로드 실패, 기본 단어 사용:', err);
         }
+    } else {
+        console.log('ℹ️ getTodaysWords 함수 없음, 기본 단어 사용');
     }
     
-    // 전역으로 단어 리스트 저장
+    // CRITICAL: 데이터를 gameState에 저장 (동기화 완료)
     gameState.defaultWordList = wordList;
+    console.log('✅ gameState.defaultWordList 설정 완료:', {
+        count: wordList.length,
+        words: wordList
+    });
     
-    // Phaser 게임 생성
+    console.log('📋 초기화 단계 5: Phaser 게임 생성');
+    console.log('⚠️ CRITICAL: 이 시점에서 데이터가 준비되어 있어야 함!');
+    // Phaser 게임 생성 (데이터 로딩 완료 후)
     game = new Phaser.Game(gameConfig);
     console.log('🎮 Phaser 게임 인스턴스 생성 완료');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 푸터 상태 초기화
     updateFooterStatus();

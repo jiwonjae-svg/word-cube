@@ -883,6 +883,7 @@ body::before {
     height: 100%;
     min-height: 600px;
     min-width: 600px;
+    aspect-ratio: 1 / 1; /* 정사각형 공간 보장 */
 }
 
 /* 중앙 게임 컨테이너 - Grid Center Item */
