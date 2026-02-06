@@ -42,6 +42,12 @@ const gameState = {
     currentUser: null
 };
 
+// 로컬 폴백 데이터 (서버 연결 실패 시 사용)
+const DEFAULT_WORD_LIST = [
+    'JAVASCRIPT', 'PHASER', 'GAME', 'PUZZLE', 'WORD',
+    'CODE', 'DEVELOP', 'FIREBASE', 'MOBILE', 'CORDOVA'
+];
+
 // Phaser 게임 인스턴스 생성
 let game;
 
@@ -92,14 +98,43 @@ window.addEventListener('DOMContentLoaded', async () => {
 
     // 컨테이너 크기 계산
     calculateGameContainerSize();
+    
+    // 컨테이너가 제대로 설정되었는지 확인
+    const container = document.getElementById('game-container');
+    if (!container || container.offsetWidth === 0 || container.offsetHeight === 0) {
+        console.error('❌ 게임 컨테이너 크기 확인 실패');
+        // 강제로 크기 설정
+        if (container) {
+            container.style.width = '800px';
+            container.style.height = '800px';
+            container.style.minHeight = '600px';
+        }
+    }
 
     // Asset Preload: 폰트 로딩 대기
-    await document.fonts.ready;
-    console.log('✅ 폰트 로딩 완료');
+    try {
+        await document.fonts.ready;
+        console.log('✅ 폰트 로딩 완료');
+    } catch (err) {
+        console.warn('⚠️ 폰트 로딩 실패, 계속 진행:', err);
+    }
 
-    // 오늘의 단어 목록 로드 (선택 사항)
-    // Firebase에서 단어 목록을 가져옴 (getTodaysWords 함수 사용)
-    // WordGenerator가 자체적으로 단어를 생성하므로 선택 사항
+    // 오늘의 단어 목록 로드 (폴백 포함)
+    let wordList = DEFAULT_WORD_LIST;
+    if (typeof getTodaysWords === 'function') {
+        try {
+            const fetchedWords = await getTodaysWords();
+            if (fetchedWords && fetchedWords.length >= 10) {
+                wordList = fetchedWords;
+                console.log('✅ 서버에서 단어 로드 완료');
+            }
+        } catch (err) {
+            console.warn('⚠️ 서버 단어 로드 실패, 기본 단어 사용:', err);
+        }
+    }
+    
+    // 전역으로 단어 리스트 저장
+    gameState.defaultWordList = wordList;
     
     // Phaser 게임 생성
     game = new Phaser.Game(gameConfig);

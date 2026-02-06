@@ -162,8 +162,12 @@ class WordGenerator {
      * ==========================================
      */
     placeAllWords() {
-        const MAX_TRIES_PER_WORD = 100; // 단어당 최대 100번 시도
+        const MAX_TRIES_PER_WORD = 50; // 단어당 최대 50번 시도 (안정화)
         const directionKeys = Object.keys(this.getDirections());
+        
+        console.log(`📝 단어 배치 시작: ${this.words.length}개`);
+        
+        let successCount = 0;
         
         for (const word of this.words) {
             let placed = false;
@@ -183,9 +187,20 @@ class WordGenerator {
                 placed = this.placeWord(word, startRow, startCol, directionKey);
             }
             
-            if (!placed) {
-                console.warn(`⚠️ Failed to place word: ${word} after ${MAX_TRIES_PER_WORD} attempts`);
+            if (placed) {
+                successCount++;
+                console.log(`✅ [${successCount}/${this.words.length}] ${word} 배치 완료 (${attempts}번 시도)`);
+            } else {
+                console.warn(`⚠️ [${successCount}/${this.words.length}] ${word} 배치 실패 (${MAX_TRIES_PER_WORD}번 시도 후 건너뜀)`);
+                // 단어를 건너뛰고 계속 진행
             }
+        }
+        
+        console.log(`📊 단어 배치 완료: ${successCount}/${this.words.length}개 성공`);
+        
+        // 최소 3개 이상 배치되지 않으면 경고
+        if (successCount < 3) {
+            console.error(`❌ 배치된 단어가 너무 적음: ${successCount}개`);
         }
     }
 

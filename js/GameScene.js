@@ -64,13 +64,40 @@ Activity = false;
     }
 
     create() {
+        console.log('🎬 GameScene.create() 시작');
+        
         // 배경 설정 (어두운 네이비로 변경)
         this.cameras.main.setBackgroundColor('#1e293b');
         
         // 단어 생성기 초기화
         this.wordGenerator = new WordGenerator(this.gridSize);
-        const generatedData = this.wordGenerator.generateGrid();
+        
+        // 그리드 생성 (방어 코드 포함)
+        let generatedData;
+        try {
+            generatedData = this.wordGenerator.generateGrid();
+            console.log('✅ 그리드 생성 완료:', generatedData.words);
+        } catch (err) {
+            console.error('❌ 그리드 생성 실패:', err);
+            // 긴급 폴백: 빈 그리드 생성
+            this.wordGenerator.createEmptyGrid();
+            this.wordGenerator.words = gameState.defaultWordList || DEFAULT_WORD_LIST;
+            this.wordGenerator.fillEmptySpaces();
+            generatedData = {
+                grid: this.wordGenerator.grid,
+                words: this.wordGenerator.words,
+                placedWords: []
+            };
+            console.warn('⚠️ 폴백 그리드 사용');
+        }
+        
         this.gridData = generatedData.grid;
+        
+        // 데이터 검증
+        if (!this.gridData || this.gridData.length === 0) {
+            console.error('❌ 그리드 데이터 없음!');
+            return;
+        }
         
         // UI에 단어 리스트 표시
         updateWordListUI(generatedData.words);
