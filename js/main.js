@@ -91,6 +91,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log('🎮 Starting game instantly...');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('📋 초기화 단계 1: DOM 준비');
+    console.log('Phaser 로드 여부:', typeof Phaser !== 'undefined' ? '✅ 로드됨' : '❌ 없음');
+    console.log('GameScene 정의 여부:', typeof GameScene !== 'undefined' ? '✅ 정의됨' : '❌ 없음');
+    console.log('WordGenerator 정의 여부:', typeof WordGenerator !== 'undefined' ? '✅ 정의됨' : '❌ 없음');
+    
+    // CRITICAL: 필수 라이브러리 확인
+    if (typeof Phaser === 'undefined') {
+        console.error('❌ Phaser.js가 로드되지 않았습니다!');
+        alert('Phaser.js 로딩 실패. 페이지를 새로고침하세요.');
+        return;
+    }
+    if (typeof GameScene === 'undefined') {
+        console.error('❌ GameScene이 정의되지 않았습니다!');
+        alert('GameScene 로딩 실패. 페이지를 새로고침하세요.');
+        return;
+    }
     
     // 게임 화면 즉시 활성화
     const gameScreen = document.getElementById('game-screen');
@@ -104,14 +119,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     
     // 컨테이너가 제대로 설정되었는지 확인
     const container = document.getElementById('game-container');
-    if (!container || container.offsetWidth === 0 || container.offsetHeight === 0) {
+    if (!container) {
+        console.error('❌ game-container 요소를 찾을 수 없습니다!');
+        return;
+    }
+    if (container.offsetWidth === 0 || container.offsetHeight === 0) {
         console.error('❌ 게임 컨테이너 크기 확인 실패');
         // 강제로 크기 설정
-        if (container) {
-            container.style.width = '800px';
-            container.style.height = '800px';
-            container.style.minHeight = '600px';
-        }
+        container.style.width = '800px';
+        container.style.height = '800px';
+        container.style.minHeight = '600px';
     } else {
         console.log('✅ 컨테이너 크기:', {
             width: container.offsetWidth,
@@ -134,15 +151,19 @@ window.addEventListener('DOMContentLoaded', async () => {
     let wordList = [...DEFAULT_WORD_LIST]; // 방어적 복사
     console.log('🔹 기본 단어 리스트 준비:', wordList);
     
+    // Firebase 단어 로드 (선택적)
     if (typeof getTodaysWords === 'function') {
         try {
             console.log('🔄 Firebase에서 단어 로드 시도...');
-            const fetchedWords = await getTodaysWords();
+            const fetchedWords = await Promise.race([
+                getTodaysWords(),
+                new Promise((resolve) => setTimeout(() => resolve(null), 3000)) // 3초 타임아웃
+            ]);
             if (fetchedWords && fetchedWords.length >= 10) {
                 wordList = fetchedWords;
                 console.log('✅ 서버에서 단어 로드 완료:', fetchedWords);
             } else {
-                console.warn('⚠️ 서버 단어 부족, 기본 단어 사용');
+                console.warn('⚠️ 서버 단어 부족 또는 타임아웃, 기본 단어 사용');
             }
         } catch (err) {
             console.warn('⚠️ 서버 단어 로드 실패, 기본 단어 사용:', err);
@@ -160,9 +181,18 @@ window.addEventListener('DOMContentLoaded', async () => {
     
     console.log('📋 초기화 단계 5: Phaser 게임 생성');
     console.log('⚠️ CRITICAL: 이 시점에서 데이터가 준비되어 있어야 함!');
-    // Phaser 게임 생성 (데이터 로딩 완료 후)
-    game = new Phaser.Game(gameConfig);
-    console.log('🎮 Phaser 게임 인스턴스 생성 완료');
+    
+    try {
+        // Phaser 게임 생성 (데이터 로딩 완료 후)
+        game = new Phaser.Game(gameConfig);
+        console.log('🎮 Phaser 게임 인스턴스 생성 완료');
+        console.log('🎮 게임 객체:', game);
+    } catch (err) {
+        console.error('❌ Phaser 게임 생성 실패:', err);
+        alert('Phaser 게임 생성 실패: ' + err.message);
+        return;
+    }
+    
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     // 푸터 상태 초기화

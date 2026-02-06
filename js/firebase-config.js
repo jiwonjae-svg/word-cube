@@ -32,6 +32,12 @@ let db;
  * ============================================
  */
 function initializeFirebase() {
+    // Firebase SDK 확인
+    if (typeof firebase === 'undefined') {
+        console.warn('⚠️ Firebase SDK가 로드되지 않음 - 로컬 모드로 실행');
+        return false;
+    }
+    
     try {
         // Firebase 앱 초기화
         app = firebase.initializeApp(firebaseConfig);
@@ -53,9 +59,11 @@ function initializeFirebase() {
             }
         });
         
+        return true;
     } catch (error) {
         console.error('❌ Firebase initialization error:', error);
-        showNotification('Firebase 초기화 실패. 설정을 확인해주세요.', 'error');
+        console.log('ℹ️ 게임은 로컬 모드로 계속 실행됩니다');
+        return false;
     }
 }
 

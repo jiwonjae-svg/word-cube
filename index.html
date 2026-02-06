@@ -151,7 +151,18 @@
     </div>
     
     <!-- Scripts -->
-    <script src="cordova.js"></script>
+    <!-- Cordova (모바일 앱에서만 로드, 브라우저에서는 404 무시) -->
+    <script>
+        // Cordova.js를 동적으로 로드 (브라우저에서 404 에러 방지)
+        (function() {
+            const script = document.createElement('script');
+            script.src = 'cordova.js';
+            script.onerror = function() {
+                console.log('🌐 브라우저 모드: Cordova 없음 (정상)');
+            };
+            document.head.appendChild(script);
+        })();
+    </script>
     <script src="js/cordova-init.js"></script>
     <script src="js/firebase-config.js"></script>
     <script src="js/WordGenerator.js"></script>
