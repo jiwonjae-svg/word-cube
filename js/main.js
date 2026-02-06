@@ -3,6 +3,18 @@
  * Word Puzzle Master - 메인 게임 설정
  */
 
+// ━━━━━ 1. FALLBACK_WORDS: 서버 연결 없이도 즉시 게임 시작 가능 ━━━━━
+const FALLBACK_WORDS = [
+    'APPLE', 'BANANA', 'CHERRY', 'DRAGON', 'EAGLE',
+    'FOREST', 'GUITAR', 'HARBOR', 'ISLAND', 'JUNGLE',
+    'KNIGHT', 'LEMON', 'MANGO', 'NORTH', 'OCEAN',
+    'PLANET', 'QUEEN', 'RIVER', 'STORM', 'TIGER',
+    'ULTRA', 'VIVID', 'WHALE', 'XENON', 'ZEBRA',
+    'ALPHA', 'BRAVE', 'CROWN', 'DELTA', 'EMBER',
+    'FLAME', 'GHOST', 'HAVEN', 'IVORY', 'JOKER',
+    'KARMA', 'LUNAR', 'MAGIC', 'NOBLE', 'ORBIT'
+];
+
 // 게임 설정
 const gameConfig = {
     type: Phaser.AUTO,
@@ -39,14 +51,9 @@ const gameState = {
     foundWords: [],
     timeLeft: 180,
     isGameActive: false,
-    currentUser: null
+    currentUser: null,
+    wordList: [...FALLBACK_WORDS] // 항상 기본값 보장
 };
-
-// 로컬 폴백 데이터 (서버 연결 실패 시 사용)
-const DEFAULT_WORD_LIST = [
-    'JAVASCRIPT', 'PHASER', 'GAME', 'PUZZLE', 'WORD',
-    'CODE', 'DEVELOP', 'FIREBASE', 'MOBILE', 'CORDOVA'
-];
 
 // Phaser 게임 인스턴스 생성
 let game;
@@ -86,166 +93,73 @@ function calculateGameContainerSize() {
     }
 }
 
-// DOM이 로드된 후 게임 즉시 시작 (NO LOGIN)
-window.addEventListener('DOMContentLoaded', async () => {
-    console.log('🎮 Starting game instantly...');
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log('📋 초기화 단계 1: DOM 준비');
-    console.log('Phaser 로드 여부:', typeof Phaser !== 'undefined' ? '✅ 로드됨' : '❌ 없음');
-    console.log('GameScene 정의 여부:', typeof GameScene !== 'undefined' ? '✅ 정의됨' : '❌ 없음');
-    console.log('WordGenerator 정의 여부:', typeof WordGenerator !== 'undefined' ? '✅ 정의됨' : '❌ 없음');
-    
-    // CRITICAL: 필수 라이브러리 확인
-    if (typeof Phaser === 'undefined') {
-        console.error('❌ Phaser.js가 로드되지 않았습니다!');
-        alert('Phaser.js 로딩 실패. 페이지를 새로고침하세요.');
-        return;
-    }
-    if (typeof GameScene === 'undefined') {
-        console.error('❌ GameScene이 정의되지 않았습니다!');
-        alert('GameScene 로딩 실패. 페이지를 새로고침하세요.');
-        return;
-    }
-    
-    // 게임 화면 즉시 활성화
-    const gameScreen = document.getElementById('game-screen');
-    if (gameScreen) {
-        gameScreen.classList.add('active');
-    }
+// ━━━━━ 2. 비동기 부트스트래퍼 (Bootstrapper Pattern) ━━━━━
 
-    console.log('📋 초기화 단계 2: 컨테이너 크기 설정');
-    // 컨테이너 크기 계산
-    calculateGameContainerSize();
+/**
+ * 서버 데이터 로딩 (3초 타임아웃)
+ * 실패 시 FALLBACK_WORDS 자동 사용
+ */
+async function loadServerData() {
+    if (typeof getTodaysWords !== 'function') {
+        console.log('ℹ️ 서버 연동 없음, FALLBACK_WORDS 사용');
+        return [...FALLBACK_WORDS];
+    }
+    try {
+        const result = await Promise.race([
+            getTodaysWords(),
+            new Promise(r => setTimeout(() => r(null), 3000))
+        ]);
+        if (result && result.length >= 10) {
+            console.log('✅ 서버 단어 로드 완료');
+            return result;
+        }
+    } catch (e) {
+        console.warn('⚠️ 서버 로드 실패:', e.message);
+    }
+    console.log('ℹ️ FALLBACK_WORDS 사용');
+    return [...FALLBACK_WORDS];
+}
+
+// DOM이 로드된 후 게임 즉시 시작
+window.addEventListener('DOMContentLoaded', async () => {
+    console.log('🎮 Starting game...');
     
-    // 컨테이너가 제대로 설정되었는지 확인
-    const container = document.getElementById('game-container');
-    if (!container) {
-        console.error('❌ game-container 요소를 찾을 수 없습니다!');
+    // 필수 라이브러리 확인
+    if (typeof Phaser === 'undefined' || typeof GameScene === 'undefined') {
+        alert('Phaser.js 또는 GameScene 로딩 실패. 새로고침하세요.');
         return;
     }
-    if (container.offsetWidth === 0 || container.offsetHeight === 0) {
-        console.error('❌ 게임 컨테이너 크기 확인 실패');
-        // 강제로 크기 설정
+    
+    // 게임 화면 활성화
+    const gameScreen = document.getElementById('game-screen');
+    if (gameScreen) gameScreen.classList.add('active');
+
+    // 컨테이너 크기 설정
+    calculateGameContainerSize();
+    const container = document.getElementById('game-container');
+    if (container && (container.offsetWidth === 0 || container.offsetHeight === 0)) {
         container.style.width = '800px';
         container.style.height = '800px';
-        container.style.minHeight = '600px';
-    } else {
-        console.log('✅ 컨테이너 크기:', {
-            width: container.offsetWidth,
-            height: container.offsetHeight
-        });
     }
 
-    console.log('📋 초기화 단계 3: Asset Preload (폰트)');
-    // Asset Preload: 폰트 로딩 대기
-    try {
-        await document.fonts.ready;
-        console.log('✅ 폰트 로딩 완료');
-    } catch (err) {
-        console.warn('⚠️ 폰트 로딩 실패, 계속 진행:', err);
-    }
+    // 폰트 로딩
+    try { await document.fonts.ready; } catch (e) { /* 무시 */ }
 
-    console.log('📋 초기화 단계 4: 데이터 로딩 (CRITICAL)');
-    // CRITICAL: 데이터 동기화 보장
-    // Firebase 데이터를 완전히 로드한 후에만 Phaser 생성
-    let wordList = [...DEFAULT_WORD_LIST]; // 방어적 복사
-    console.log('🔹 기본 단어 리스트 준비:', wordList);
+    // CRITICAL: 데이터 먼저 확보, 그 후 Phaser 생성
+    gameState.wordList = await loadServerData();
+    console.log('✅ 단어 리스트 확보:', gameState.wordList.length, '개');
     
-    // Firebase 단어 로드 (선택적)
-    if (typeof getTodaysWords === 'function') {
-        try {
-            console.log('🔄 Firebase에서 단어 로드 시도...');
-            const fetchedWords = await Promise.race([
-                getTodaysWords(),
-                new Promise((resolve) => setTimeout(() => resolve(null), 3000)) // 3초 타임아웃
-            ]);
-            if (fetchedWords && fetchedWords.length >= 10) {
-                wordList = fetchedWords;
-                console.log('✅ 서버에서 단어 로드 완료:', fetchedWords);
-            } else {
-                console.warn('⚠️ 서버 단어 부족 또는 타임아웃, 기본 단어 사용');
-            }
-        } catch (err) {
-            console.warn('⚠️ 서버 단어 로드 실패, 기본 단어 사용:', err);
-        }
-    } else {
-        console.log('ℹ️ getTodaysWords 함수 없음, 기본 단어 사용');
-    }
-    
-    // CRITICAL: 데이터를 gameState에 저장 (동기화 완료)
-    gameState.defaultWordList = wordList;
-    console.log('✅ gameState.defaultWordList 설정 완료:', {
-        count: wordList.length,
-        words: wordList
-    });
-    
-    console.log('📋 초기화 단계 5: Phaser 게임 생성');
-    console.log('⚠️ CRITICAL: 이 시점에서 데이터가 준비되어 있어야 함!');
-    
-    try {
-        // Phaser 게임 생성 (데이터 로딩 완료 후)
-        game = new Phaser.Game(gameConfig);
-        console.log('🎮 Phaser 게임 인스턴스 생성 완료');
-        console.log('🎮 게임 객체:', game);
-        
-        // CRITICAL: Canvas DOM 삽입 확인
-        setTimeout(() => {
-            console.log('🔍 Canvas DOM 삽입 확인 (1초 후)...');
-            
-            const canvasInDom = document.querySelector('#game-container canvas');
-            console.log('Canvas in DOM:', {
-                exists: !!canvasInDom,
-                element: canvasInDom,
-                parentId: canvasInDom ? canvasInDom.parentElement.id : null,
-                width: canvasInDom ? canvasInDom.width : null,
-                height: canvasInDom ? canvasInDom.height : null,
-                style: canvasInDom ? canvasInDom.style.cssText : null,
-                computedStyle: canvasInDom ? window.getComputedStyle(canvasInDom).display : null
-            });
-            
-            const gameContainer = document.getElementById('game-container');
-            console.log('Game Container:', {
-                exists: !!gameContainer,
-                children: gameContainer ? gameContainer.children.length : 0,
-                childElements: gameContainer ? Array.from(gameContainer.children).map(c => c.tagName) : [],
-                offsetWidth: gameContainer ? gameContainer.offsetWidth : 0,
-                offsetHeight: gameContainer ? gameContainer.offsetHeight : 0,
-                computedStyle: gameContainer ? {
-                    display: window.getComputedStyle(gameContainer).display,
-                    visibility: window.getComputedStyle(gameContainer).visibility,
-                    opacity: window.getComputedStyle(gameContainer).opacity,
-                    position: window.getComputedStyle(gameContainer).position
-                } : null
-            });
-            
-            if (!canvasInDom) {
-                console.error('❌ Canvas가 DOM에 삽입되지 않았습니다!');
-                alert('Canvas DOM 삽입 실패. Phaser 설정을 확인하세요.');
-            } else if (canvasInDom.width === 0 || canvasInDom.height === 0) {
-                console.error('❌ Canvas 크기가 0입니다!');
-                alert('Canvas 크기 오류. 컨테이너 크기를 확인하세요.');
-            } else {
-                console.log('✅ Canvas가 정상적으로 DOM에 삽입되었습니다!');
-            }
-        }, 1000);
-        
-    } catch (err) {
-        console.error('❌ Phaser 게임 생성 실패:', err);
-        alert('Phaser 게임 생성 실패: ' + err.message);
-        return;
-    }
-    
-    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    // Phaser 게임 생성
+    game = new Phaser.Game(gameConfig);
+    console.log('🎮 Phaser 게임 생성 완료');
 
     // 푸터 상태 초기화
     updateFooterStatus();
-    
-    // 커스텀 이벤트 리스너 등록
     setupEventListeners();
     
-    // 실시간 리더보드 구독
+    // 리더보드 구독 (선택적)
     if (typeof subscribeToLeaderboard === 'function') {
-        subscribeToLeaderboard(updateLeaderboardUI);
+        try { subscribeToLeaderboard(updateLeaderboardUI); } catch (e) { /* 무시 */ }
     }
     
     console.log('✅ Game started!');

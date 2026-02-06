@@ -165,24 +165,8 @@ class GameScene extends Phaser.Scene {
      * ==========================================
      */
     createGrid() {
-        console.log('🖼️ createGrid() 시작');
-        console.log('Grid 데이터:', {
-            exists: !!this.gridData,
-            size: this.gridData ? this.gridData.length : 0,
-            firstRow: this.gridData ? this.gridData[0] : null
-        });
-        console.log('Canvas 크기:', {
-            width: this.cameras.main.width,
-            height: this.cameras.main.height
-        });
-        console.log('Offset:', {
-            offsetX: this.offsetX,
-            offsetY: this.offsetY
-        });
-        
         this.cellSprites = [];
         
-        let cellCount = 0;
         for (let row = 0; row < this.gridSize; row++) {
             this.cellSprites[row] = [];
             
@@ -263,11 +247,8 @@ class GameScene extends Phaser.Scene {
                 });
                 
                 this.cellSprites[row][col] = cellData;
-                cellCount++;
             }
         }
-        
-        console.log(`✅ createGrid() 완료: ${cellCount}개 셀 생성됨`);
     }
 
     /**
