@@ -747,6 +747,9 @@ body::before {
     position: relative;
     z-index: 1;
     min-height: 0;
+    /* DEBUG: 레이아웃 확인 */
+    background: rgba(0, 255, 0, 0.05); /* 연한 초록색 배경 */
+    border: 2px dashed green; /* 점선 테두리 */
 }
 
 /* 사이드 패널 공통 스타일 - Soft Light Glassmorphism */
@@ -884,11 +887,10 @@ body::before {
     min-height: 600px;
     min-width: 600px;
     aspect-ratio: 1 / 1; /* 정사각형 공간 보장 */
-}
-
-/* 중앙 게임 컨테이너 - Grid Center Item */
-#game-container {
     justify-self: center;
+    /* DEBUG: 해당 영역이 보이는지 확인 */
+    background: rgba(255, 0, 0, 0.1); /* 빨간색 반투명 */
+    border: 2px solid red; /* 경계 표시 */
 }
 
 #game-container canvas {

@@ -187,19 +187,48 @@ window.addEventListener('DOMContentLoaded', async () => {
         game = new Phaser.Game(gameConfig);
         console.log('🎮 Phaser 게임 인스턴스 생성 완료');
         console.log('🎮 게임 객체:', game);
-        console.log('🎮 Canvas 확인:', {
-            canvas: game.canvas,
-            canvasExists: !!game.canvas,
-            canvasParent: game.canvas ? game.canvas.parentElement : null,
-            canvasSize: game.canvas ? `${game.canvas.width}x${game.canvas.height}` : 'N/A'
-        });
         
-        // Canvas가 제대로 생성되었는지 확인
-        if (!game.canvas) {
-            console.error('❌ Canvas가 생성되지 않았습니다!');
-            alert('Canvas 생성 실패. 페이지를 새로고침하세요.');
-            return;
-        }
+        // CRITICAL: Canvas DOM 삽입 확인
+        setTimeout(() => {
+            console.log('🔍 Canvas DOM 삽입 확인 (1초 후)...');
+            
+            const canvasInDom = document.querySelector('#game-container canvas');
+            console.log('Canvas in DOM:', {
+                exists: !!canvasInDom,
+                element: canvasInDom,
+                parentId: canvasInDom ? canvasInDom.parentElement.id : null,
+                width: canvasInDom ? canvasInDom.width : null,
+                height: canvasInDom ? canvasInDom.height : null,
+                style: canvasInDom ? canvasInDom.style.cssText : null,
+                computedStyle: canvasInDom ? window.getComputedStyle(canvasInDom).display : null
+            });
+            
+            const gameContainer = document.getElementById('game-container');
+            console.log('Game Container:', {
+                exists: !!gameContainer,
+                children: gameContainer ? gameContainer.children.length : 0,
+                childElements: gameContainer ? Array.from(gameContainer.children).map(c => c.tagName) : [],
+                offsetWidth: gameContainer ? gameContainer.offsetWidth : 0,
+                offsetHeight: gameContainer ? gameContainer.offsetHeight : 0,
+                computedStyle: gameContainer ? {
+                    display: window.getComputedStyle(gameContainer).display,
+                    visibility: window.getComputedStyle(gameContainer).visibility,
+                    opacity: window.getComputedStyle(gameContainer).opacity,
+                    position: window.getComputedStyle(gameContainer).position
+                } : null
+            });
+            
+            if (!canvasInDom) {
+                console.error('❌ Canvas가 DOM에 삽입되지 않았습니다!');
+                alert('Canvas DOM 삽입 실패. Phaser 설정을 확인하세요.');
+            } else if (canvasInDom.width === 0 || canvasInDom.height === 0) {
+                console.error('❌ Canvas 크기가 0입니다!');
+                alert('Canvas 크기 오류. 컨테이너 크기를 확인하세요.');
+            } else {
+                console.log('✅ Canvas가 정상적으로 DOM에 삽입되었습니다!');
+            }
+        }, 1000);
+        
     } catch (err) {
         console.error('❌ Phaser 게임 생성 실패:', err);
         alert('Phaser 게임 생성 실패: ' + err.message);
