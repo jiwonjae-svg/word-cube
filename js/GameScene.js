@@ -51,8 +51,7 @@ class GameScene extends Phaser.Scene {
         this.lastWordFoundTime = 0;
         this.minTimeBetweenWords = 300; // 최소 300ms 간격
         this.wordFoundTimestamps = []; // 단어 발견 타임스탬프 기록
-        this.suspicious
-Activity = false;
+        this.suspiciousActivity = false;
         
         // Score validation
         this.lastScoreUpdateTime = 0;
