@@ -215,6 +215,23 @@ export function getCurrentUser() {
   return currentUser;
 }
 
+// Check if email is already registered
+export async function checkEmailExists(email) {
+  if (getIsOnline() && getFirebaseAuth()) {
+    try {
+      const { fetchSignInMethodsForEmail } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      const methods = await fetchSignInMethodsForEmail(getFirebaseAuth(), email);
+      return methods.length > 0;
+    } catch (err) {
+      console.warn('[Auth] Email check failed', err);
+      return false;
+    }
+  }
+  // Offline check
+  const users = JSON.parse(localStorage.getItem('wordcube_offline_users') || '[]');
+  return users.some(u => u.email === email);
+}
+
 // Register auth state change callback
 export function onAuthChange(callback) {
   onAuthChangeCallbacks.push(callback);

@@ -28,6 +28,7 @@ export class Game {
     // Callbacks
     this.onGameComplete = null;
     this.onWordsUpdated = null;
+    this.onMoveHistoryChange = null;
   }
 
   // Initialize with DOM elements
@@ -80,12 +81,36 @@ export class Game {
     // Render word list
     this._renderWordList();
 
+    // Highlight words on the solved cube
+    this._highlightSolvedWords();
+
     return this.puzzle;
+  }
+
+  // Highlight all target word positions on the solved (pre-scramble) cube
+  _highlightSolvedWords() {
+    if (!this.cube || !this.puzzle) return;
+    const results = findWordsOnFaces(this.puzzle.solvedFaces, this.targetWords, this.cubeSize);
+    const tilesToHighlight = [];
+    for (const word of this.targetWords) {
+      const locations = results.get(word) || [];
+      for (const loc of locations) {
+        for (const pos of loc.positions) {
+          tilesToHighlight.push({ faceIdx: loc.face, row: pos.row, col: pos.col });
+        }
+      }
+    }
+    if (tilesToHighlight.length > 0) {
+      this.cube.highlightTiles(tilesToHighlight);
+    }
   }
 
   // After user reviews solved state, scramble and begin
   async beginScramble() {
     this.state = 'playing';
+
+    // Clear highlights before scrambling
+    this.cube.clearHighlights();
 
     // Animated scramble
     await this.cube.animatedScramble(this.puzzle.scrambleMoves);
@@ -93,6 +118,7 @@ export class Game {
     // Set up rotation callback
     this.cube.onRotationComplete = (grids) => {
       this._checkWords(grids);
+      this._notifyMoveHistoryChange();
     };
 
     // Initial word check (some might be formed after scramble)
@@ -104,6 +130,31 @@ export class Game {
 
     // Save session
     this._saveSession();
+  }
+
+  // Undo last move
+  undo() {
+    if (!this.cube || this.state !== 'playing') return false;
+    const result = this.cube.undo();
+    if (result) this._notifyMoveHistoryChange();
+    return result;
+  }
+
+  // Redo last undone move
+  redo() {
+    if (!this.cube || this.state !== 'playing') return false;
+    const result = this.cube.redo();
+    if (result) this._notifyMoveHistoryChange();
+    return result;
+  }
+
+  _notifyMoveHistoryChange() {
+    if (this.onMoveHistoryChange && this.cube) {
+      this.onMoveHistoryChange(
+        this.cube.moveHistory.length,
+        this.cube.redoStack.length
+      );
+    }
   }
 
   // Check for found words on current face grids
@@ -250,6 +301,7 @@ export class Game {
         targetWords: this.targetWords,
         foundWords: Object.fromEntries(this.foundWords),
         faceGrids: this.cube ? this.cube.getFaceGrids() : null,
+        moveHistory: this.cube ? this.cube.moveHistory : [],
         startServerTime: this.startServerTime,
         timestamp: Date.now()
       };
@@ -289,9 +341,13 @@ export class Game {
       if (data.faceGrids) {
         this.cube.setFaceGrids(data.faceGrids);
       }
+      if (data.moveHistory) {
+        this.cube.moveHistory = data.moveHistory;
+      }
 
       this.cube.onRotationComplete = (grids) => {
         this._checkWords(grids);
+        this._notifyMoveHistoryChange();
       };
 
       this._applySettings();

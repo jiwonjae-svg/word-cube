@@ -22,10 +22,10 @@
       </div>
       <form class="auth-form" id="login-form" autocomplete="off">
         <div class="input-group">
-          <input type="email" id="login-email" class="glass-input" placeholder="Email" required>
+          <input type="email" id="login-email" class="glass-input" placeholder="Email" required maxlength="254">
         </div>
         <div class="input-group">
-          <input type="password" id="login-password" class="glass-input" placeholder="Password" required>
+          <input type="password" id="login-password" class="glass-input" placeholder="Password" required maxlength="128">
         </div>
         <button type="button" id="google-auth-btn" class="glass-btn google-btn">
           <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
@@ -47,17 +47,25 @@
         <p>Create Account</p>
       </div>
       <form class="auth-form" id="register-form" autocomplete="off">
-        <div class="input-group">
-          <input type="email" id="reg-email" class="glass-input" placeholder="Email" required>
+        <div class="input-group input-with-btn">
+          <input type="email" id="reg-email" class="glass-input" placeholder="Email" required maxlength="254">
+          <button type="button" id="verify-email-btn" class="glass-btn primary-btn verify-btn">Verify</button>
+        </div>
+        <div class="input-group hidden" id="verify-code-group">
+          <div class="input-with-btn">
+            <input type="text" id="reg-verify-code" class="glass-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
+            <button type="button" id="confirm-code-btn" class="glass-btn primary-btn verify-btn">Confirm</button>
+          </div>
+          <p class="verify-hint" id="verify-hint"></p>
         </div>
         <div class="input-group">
-          <input type="password" id="reg-password" class="glass-input" placeholder="Password" required minlength="6">
+          <input type="password" id="reg-password" class="glass-input" placeholder="Password" required minlength="6" maxlength="128">
         </div>
         <div class="input-group">
-          <input type="password" id="reg-password-confirm" class="glass-input" placeholder="Confirm Password" required minlength="6">
+          <input type="password" id="reg-password-confirm" class="glass-input" placeholder="Confirm Password" required minlength="6" maxlength="128">
         </div>
         <div class="input-group">
-          <input type="text" id="reg-name" class="glass-input" placeholder="Display Name" required>
+          <input type="text" id="reg-name" class="glass-input" placeholder="Display Name" required maxlength="30">
         </div>
         <button type="submit" id="register-btn" class="glass-btn primary-btn">Complete</button>
         <button type="button" id="cancel-register-btn" class="glass-btn secondary-btn">Cancel</button>
@@ -69,7 +77,15 @@
   <div id="game-page" class="page">
     <!-- Header -->
     <header class="game-header glass-panel">
-      <div class="header-left"></div>
+      <div class="header-left">
+        <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)" disabled>
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 10h10a5 5 0 015 5v2"/><path d="M3 10l5-5M3 10l5 5"/></svg>
+        </button>
+        <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Y)" disabled>
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10H11a5 5 0 00-5 5v2"/><path d="M21 10l-5-5M21 10l-5 5"/></svg>
+        </button>
+        <button id="new-game-btn" class="glass-btn secondary-btn small-btn" title="New Game" style="display:none;">New Game</button>
+      </div>
       <div class="header-center">
         <h1 class="header-title">WORD CUBE</h1>
       </div>
@@ -82,6 +98,19 @@
         </button>
       </div>
     </header>
+
+    <!-- Mobile Action Bar (visible only on mobile, below header) -->
+    <div class="mobile-action-bar">
+      <button id="mobile-undo-btn" class="icon-btn" title="Undo" disabled>
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 10h10a5 5 0 015 5v2"/><path d="M3 10l5-5M3 10l5 5"/></svg>
+      </button>
+      <button id="mobile-redo-btn" class="icon-btn" title="Redo" disabled>
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 10H11a5 5 0 00-5 5v2"/><path d="M21 10l-5-5M21 10l-5 5"/></svg>
+      </button>
+      <button id="mobile-words-btn" class="glass-btn secondary-btn small-btn">Words</button>
+      <button id="mobile-ranking-btn" class="glass-btn secondary-btn small-btn">Ranking</button>
+      <button id="mobile-new-game-btn" class="glass-btn secondary-btn small-btn" style="display:none;">New Game</button>
+    </div>
 
     <!-- Main Content -->
     <main class="game-main">
@@ -219,6 +248,14 @@
             <li>Complete the puzzle by finding all words!</li>
           </ul>
         </div>
+        <div class="help-section">
+          <h3>Keyboard Shortcuts</h3>
+          <ul>
+            <li><strong>Ctrl + Z:</strong> Undo last move</li>
+            <li><strong>Ctrl + Y / Ctrl + Shift + Z:</strong> Redo move</li>
+            <li><strong>Escape:</strong> Close any modal</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
@@ -298,8 +335,75 @@
     </div>
   </div>
 
+  <!-- Mobile Words Modal -->
+  <div id="mobile-words-modal" class="mobile-panel-modal hidden">
+    <div class="mobile-panel-overlay"></div>
+    <div class="mobile-panel-content glass-panel">
+      <div class="modal-header">
+        <h2>Words to Find</h2>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div id="mobile-word-list" class="word-list"></div>
+    </div>
+  </div>
+
+  <!-- Mobile Ranking Modal -->
+  <div id="mobile-ranking-modal" class="mobile-panel-modal hidden">
+    <div class="mobile-panel-overlay"></div>
+    <div class="mobile-panel-content glass-panel">
+      <div class="modal-header">
+        <h2>Leaderboard</h2>
+        <p class="panel-subtitle" id="mobile-leaderboard-size">Cube: 3&times;3</p>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div id="mobile-leaderboard-list" class="leaderboard-list"></div>
+    </div>
+  </div>
+
+  <!-- Welcome Modal -->
+  <div id="welcome-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content glass-panel" style="max-width:420px;">
+      <div class="modal-header" style="justify-content:center;">
+        <h2 style="text-align:center;">Welcome to Word Cube!</h2>
+      </div>
+      <div class="modal-body" style="text-align:center;">
+        <p style="font-size:48px;margin-bottom:8px;">&#129513;</p>
+        <p id="welcome-user-name" style="font-size:18px;font-weight:700;margin-bottom:12px;color:var(--primary);"></p>
+        <p style="color:var(--text-light);font-size:14px;line-height:1.7;margin-bottom:20px;">Rotate the cube's rows and columns to align hidden words on each face. Find all words to complete the puzzle!</p>
+        <div style="text-align:left;background:var(--primary-light);padding:16px;border-radius:var(--radius-sm);margin-bottom:20px;">
+          <p style="font-size:13px;font-weight:600;color:var(--primary);margin-bottom:8px;">Quick Tips:</p>
+          <ul style="font-size:13px;color:var(--text-light);padding-left:18px;line-height:1.8;">
+            <li>Left-click + drag a tile to rotate its row/column</li>
+            <li>Right-click + drag to orbit the cube</li>
+            <li>Use Ctrl+Z / Ctrl+Y to undo/redo moves</li>
+          </ul>
+        </div>
+        <button id="welcome-start-btn" class="glass-btn primary-btn large-btn">Let's Play!</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification -->
   <div id="toast-container"></div>
+
+  <!-- New Game Confirm Modal -->
+  <div id="newgame-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content glass-panel" style="max-width:380px;">
+      <div class="modal-header">
+        <h2>Start New Game?</h2>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-light);font-size:14px;margin-bottom:16px;">Your current progress will be lost. Are you sure you want to start a new game?</p>
+        <div style="display:flex;gap:10px;">
+          <button id="newgame-cancel-btn" class="glass-btn secondary-btn" style="flex:1;">Cancel</button>
+          <button id="newgame-confirm-btn" class="glass-btn primary-btn" style="flex:1;background:linear-gradient(135deg,var(--danger),#f87171);border-color:transparent;">New Game</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Scripts -->
   <script type="importmap">

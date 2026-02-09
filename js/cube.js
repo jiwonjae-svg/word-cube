@@ -67,6 +67,10 @@ export class WordCube {
     this.onRotationComplete = null;
     this.onTileClick = null;
 
+    // Undo/Redo history
+    this.moveHistory = [];  // [{axis, layer, direction}]
+    this.redoStack = [];
+
     // Highlight state
     this.highlightedTiles = new Set();
     this._popOutAnims = new Map(); // mesh -> { originalPos, active }
@@ -342,7 +346,7 @@ export class WordCube {
   }
 
   // Apply a slice rotation to the logical state
-  rotateSlice(axis, layerIndex, direction, animate = true) {
+  rotateSlice(axis, layerIndex, direction, animate = true, recordHistory = true) {
     if (this.animating) return;
 
     // Cancel any active pop-out animations to avoid position corruption
@@ -352,13 +356,21 @@ export class WordCube {
     const layerCoord = (layerIndex - (this.n - 1) / 2) * this.tileSize;
 
     // Find all tiles in this slice
+    // Threshold 0.55 ensures edge layers also capture the perpendicular face tiles
+    // (face tiles at ±half are tileSize/2 away from edge layer centers)
     const sliceTiles = this.tileMeshes.filter(t => {
       const p = t.mesh.position;
       const coord = axis === 0 ? p.x : axis === 1 ? p.y : p.z;
-      return Math.abs(coord - layerCoord) < this.tileSize * 0.4;
+      return Math.abs(coord - layerCoord) < this.tileSize * 0.55;
     });
 
     if (sliceTiles.length === 0) return;
+
+    // Record for undo/redo
+    if (recordHistory) {
+      this.moveHistory.push({ axis, layer: layerIndex, direction });
+      this.redoStack = [];
+    }
 
     if (animate) {
       this._animateSliceRotation(axis, layerCoord, direction, sliceTiles);
@@ -636,7 +648,7 @@ export class WordCube {
       const sliceTiles = this.tileMeshes.filter(t => {
         const p = t.mesh.position;
         const coord = move.axis === 0 ? p.x : move.axis === 1 ? p.y : p.z;
-        return Math.abs(coord - layerCoord) < this.tileSize * 0.4;
+        return Math.abs(coord - layerCoord) < this.tileSize * 0.55;
       });
       this._applySliceRotation(move.axis, move.direction, sliceTiles);
     }
@@ -653,7 +665,7 @@ export class WordCube {
       const sliceTiles = this.tileMeshes.filter(t => {
         const p = t.mesh.position;
         const coord = move.axis === 0 ? p.x : move.axis === 1 ? p.y : p.z;
-        return Math.abs(coord - layerCoord) < this.tileSize * 0.4;
+        return Math.abs(coord - layerCoord) < this.tileSize * 0.55;
       });
 
       if (sliceTiles.length === 0) continue;
@@ -913,76 +925,100 @@ export class WordCube {
     }
   }
 
+  // Undo last rotation
+  undo() {
+    if (this.animating || this.moveHistory.length === 0) return false;
+    const move = this.moveHistory.pop();
+    this.redoStack.push(move);
+    // Reverse the move
+    this.rotateSlice(move.axis, move.layer, -move.direction, true, false);
+    return true;
+  }
+
+  // Redo last undone rotation
+  redo() {
+    if (this.animating || this.redoStack.length === 0) return false;
+    const move = this.redoStack.pop();
+    this.moveHistory.push(move);
+    this.rotateSlice(move.axis, move.layer, move.direction, true, false);
+    return true;
+  }
+
   _determineSliceRotation(dx, dy, sens, inv) {
     const face = this.dragFace;
-    const absX = Math.abs(dx);
-    const absY = Math.abs(dy);
+
+    // Face-local tangent axes (u = column/horizontal, v = row/vertical)
+    const FACE_U = [
+      new THREE.Vector3(1, 0, 0),   // F: +X
+      new THREE.Vector3(-1, 0, 0),  // B: -X
+      new THREE.Vector3(1, 0, 0),   // U: +X
+      new THREE.Vector3(1, 0, 0),   // D: +X
+      new THREE.Vector3(0, 0, -1),  // L: -Z
+      new THREE.Vector3(0, 0, 1),   // R: +Z
+    ];
+    const FACE_V = [
+      new THREE.Vector3(0, -1, 0),  // F: -Y
+      new THREE.Vector3(0, -1, 0),  // B: -Y
+      new THREE.Vector3(0, 0, 1),   // U: +Z
+      new THREE.Vector3(0, 0, -1),  // D: -Z
+      new THREE.Vector3(0, -1, 0),  // L: -Y
+      new THREE.Vector3(0, -1, 0),  // R: -Y
+    ];
+
+    const uLocal = FACE_U[face];
+    const vLocal = FACE_V[face];
+    const nLocal = FACE_NORMALS[face];
+
+    // Project face tangent axes to screen space
+    const uWorld = uLocal.clone().applyQuaternion(this.cubeGroup.quaternion);
+    const vWorld = vLocal.clone().applyQuaternion(this.cubeGroup.quaternion);
+    const uScreen = this._projectToScreen(uWorld);
+    const vScreen = this._projectToScreen(vWorld);
+
+    // Decompose screen drag into face-local u/v components
+    const uDot = dx * uScreen.x + dy * uScreen.y;
+    const vDot = dx * vScreen.x + dy * vScreen.y;
+
+    // Rotation axis lookup tables
+    const ROW_AXIS = [1, 1, 2, 2, 1, 1]; // Y, Y, Z, Z, Y, Y
+    const COL_AXIS = [0, 0, 0, 0, 2, 2]; // X, X, X, X, Z, Z
 
     let axis, layer, direction;
 
-    // Determine based on face and drag direction
-    // Horizontal drag → rotate the row, Vertical drag → rotate the column
-    if (absX > absY) {
-      // Horizontal drag
-      direction = dx > 0 ? 1 : -1;
-      direction *= inv;
+    if (Math.abs(uDot) > Math.abs(vDot)) {
+      // Horizontal drag (along u) -> rotate the row
+      axis = ROW_AXIS[face];
+      layer = (face === 2) ? this.dragRow : this.n - 1 - this.dragRow;
 
-      switch (face) {
-        case 0: // Front: horizontal → Y-axis rotation
-          axis = 1; layer = this.n - 1 - this.dragRow;
-          direction = -direction;
-          break;
-        case 1: // Back
-          axis = 1; layer = this.n - 1 - this.dragRow;
-          break;
-        case 2: // Up: horizontal → Z-axis rotation
-          axis = 2; layer = this.dragRow;
-          break;
-        case 3: // Down
-          axis = 2; layer = this.n - 1 - this.dragRow;
-          direction = -direction;
-          break;
-        case 4: // Left: horizontal → Y-axis rotation
-          axis = 1; layer = this.n - 1 - this.dragRow;
-          direction = -direction;
-          break;
-        case 5: // Right
-          axis = 1; layer = this.n - 1 - this.dragRow;
-          direction = -direction;
-          break;
-      }
+      // Compute direction via cross product: (rotAxis x faceNormal) . uAxis
+      // This gives the correct sign at ANY viewing angle.
+      const rotVec = new THREE.Vector3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0);
+      const cross = new THREE.Vector3().crossVectors(rotVec, nLocal);
+      const sign = cross.dot(uLocal);
+      direction = (uDot > 0 ? 1 : -1) * (sign > 0 ? 1 : -1) * inv;
     } else {
-      // Vertical drag
-      direction = dy > 0 ? 1 : -1;
-      direction *= inv;
+      // Vertical drag (along v) -> rotate the column
+      axis = COL_AXIS[face];
+      layer = (face === 1 || face === 4) ? this.n - 1 - this.dragCol : this.dragCol;
 
-      switch (face) {
-        case 0: // Front: vertical → X-axis rotation
-          axis = 0; layer = this.dragCol;
-          break;
-        case 1: // Back
-          axis = 0; layer = this.n - 1 - this.dragCol;
-          direction = -direction;
-          break;
-        case 2: // Up: vertical → X-axis rotation
-          axis = 0; layer = this.dragCol;
-          break;
-        case 3: // Down
-          axis = 0; layer = this.dragCol;
-          direction = -direction;
-          break;
-        case 4: // Left: vertical → Z-axis rotation
-          axis = 2; layer = this.n - 1 - this.dragCol;
-          break;
-        case 5: // Right
-          axis = 2; layer = this.dragCol;
-          direction = -direction;
-          break;
-      }
+      const rotVec = new THREE.Vector3(axis === 0 ? 1 : 0, axis === 1 ? 1 : 0, axis === 2 ? 1 : 0);
+      const cross = new THREE.Vector3().crossVectors(rotVec, nLocal);
+      const sign = cross.dot(vLocal);
+      direction = (vDot > 0 ? 1 : -1) * (sign > 0 ? 1 : -1) * inv;
     }
 
     this.rotateSlice(axis, layer, direction, true);
     this.isDragging = false;
+  }
+
+  // Project a 3D direction vector to 2D screen direction
+  _projectToScreen(worldDir) {
+    // Camera view matrix transforms world to camera space
+    const camDir = worldDir.clone().applyQuaternion(this.camera.quaternion.clone().invert());
+    // Screen: x = camDir.x, y = camDir.y (negative because screen Y is flipped)
+    const len = Math.sqrt(camDir.x * camDir.x + camDir.y * camDir.y);
+    if (len < 0.001) return { x: 1, y: 0 };
+    return { x: camDir.x / len, y: -camDir.y / len };
   }
 
   _onMouseUp(event) {

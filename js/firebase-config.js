@@ -2,12 +2,12 @@
 
 // Firebase configuration - set your own keys here
 const FIREBASE_CONFIG = {
-  apiKey: "",
-  authDomain: "",
-  projectId: "",
-  storageBucket: "",
-  messagingSenderId: "",
-  appId: ""
+  apiKey: "AIzaSyCa9LeMogzXCeENt_pO0kg9HVSDONwVRAs",
+  authDomain: "word-cube-d9460.firebaseapp.com",
+  projectId: "word-cube-d9460",
+  storageBucket: "word-cube-d9460.firebasestorage.app",
+  messagingSenderId: "457772628492",
+  appId: "1:457772628492:web:069d27e4a6aae460308c29"
 };
 
 let firebaseApp = null;
@@ -54,6 +54,25 @@ export function getFirebaseDb() { return firebaseDb; }
 
 const LS_PREFIX = 'wordcube_';
 
+// ===== Security Validation =====
+
+// Validate document path to prevent NoSQL injection
+function validatePath(collection, docId) {
+  if (typeof collection !== 'string' || typeof docId !== 'string') return false;
+  if (collection.length === 0 || collection.length > 100) return false;
+  if (docId.length === 0 || docId.length > 300) return false;
+  if (/[\/\.\#\$\[\]\*]/.test(collection)) return false;
+  return true;
+}
+
+// Limit data size to prevent buffer overflow
+function validateDataSize(data) {
+  try {
+    const size = new Blob([JSON.stringify(data)]).size;
+    return size < 2 * 1024 * 1024; // 2MB max per document
+  } catch { return false; }
+}
+
 function lsKey(collection, docId) {
   return `${LS_PREFIX}${collection}_${docId}`;
 }
@@ -82,6 +101,15 @@ function updateCollectionIndex(collection, docId) {
 
 // Set a document
 export async function setDoc(collection, docId, data) {
+  if (!validatePath(collection, docId)) {
+    console.error('[Storage] Invalid document path');
+    return false;
+  }
+  if (!validateDataSize(data)) {
+    console.error('[Storage] Data too large');
+    return false;
+  }
+
   if (isOnline && firebaseDb) {
     try {
       const fs = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');
@@ -109,6 +137,11 @@ export async function setDoc(collection, docId, data) {
 
 // Get a document
 export async function getDoc(collection, docId) {
+  if (!validatePath(collection, docId)) {
+    console.error('[Storage] Invalid document path');
+    return null;
+  }
+
   if (isOnline && firebaseDb) {
     try {
       const fs = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js');

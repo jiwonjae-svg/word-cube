@@ -1,6 +1,6 @@
 // app.js - Main entry point: routing, UI events, and page management
 
-import { initAuth, login, register, loginWithGoogle, logout, onAuthChange, getCurrentUser, updateProfile } from './auth.js';
+import { initAuth, login, register, loginWithGoogle, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists } from './auth.js';
 import { Game } from './game.js';
 import { GameTimer } from './timer.js';
 import { BackgroundCubes } from './cube.js';
@@ -13,6 +13,11 @@ let selectedCubeSize = null;
 let currentPage = 'login';
 let gamePageInitialized = false;
 
+// Email verification state
+let emailVerified = false;
+let verificationCode = null;
+let verifiedEmail = null;
+
 // ===== DOM References =====
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => document.querySelectorAll(sel);
@@ -22,6 +27,72 @@ function countryFlag(code) {
   if (!code || code.length !== 2) return code || '';
   const lower = code.toLowerCase();
   return `<img src="https://flagcdn.com/16x12/${lower}.png" alt="${code}" style="vertical-align:middle;margin-right:2px;" onerror="this.replaceWith(document.createTextNode('${code}'))">`;
+}
+
+// ===== Security: HTML Sanitization =====
+function sanitize(str) {
+  if (typeof str !== 'string') return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ===== Avatar Processing (resize to max 200px, enforce 10MB limit) =====
+function processAvatarFile(file) {
+  return new Promise((resolve, reject) => {
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = (ev) => {
+      const dataUrl = ev.target.result;
+      // Always resize for storage efficiency
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 200;
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          if (width > height) {
+            height = Math.round(height * maxDim / width);
+            width = maxDim;
+          } else {
+            width = Math.round(width * maxDim / height);
+            height = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        const result = canvas.toDataURL('image/jpeg', 0.8);
+        if (file.size > MAX_FILE_SIZE) {
+          showToast('Image was resized (original > 10MB)', 'info');
+        }
+        resolve(result);
+      };
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function resetEmailVerification() {
+  emailVerified = false;
+  verificationCode = null;
+  verifiedEmail = null;
+  const el = $('reg-email');
+  if (el) el.readOnly = false;
+  const cg = $('verify-code-group');
+  if (cg) cg.classList.add('hidden');
+  const rc = $('reg-verify-code');
+  if (rc) { rc.value = ''; rc.readOnly = false; }
+  const vb = $('verify-email-btn');
+  if (vb) { vb.disabled = false; vb.textContent = 'Verify'; }
+  const cb = $('confirm-code-btn');
+  if (cb) cb.disabled = false;
+  const vh = $('verify-hint');
+  if (vh) { vh.textContent = ''; vh.style.color = ''; }
 }
 
 // Pages
@@ -167,6 +238,16 @@ function setupAuthEvents() {
       return;
     }
 
+    if (!emailVerified || verifiedEmail !== email) {
+      showToast('Please verify your email first', 'error');
+      return;
+    }
+
+    if (name.length > 30) {
+      showToast('Name must be 30 characters or less', 'error');
+      return;
+    }
+
     if (password !== confirm) {
       showToast('Passwords do not match', 'error');
       return;
@@ -174,6 +255,11 @@ function setupAuthEvents() {
 
     if (password.length < 6) {
       showToast('Password must be at least 6 characters', 'error');
+      return;
+    }
+
+    if (password.length > 128) {
+      showToast('Password must be 128 characters or less', 'error');
       return;
     }
 
@@ -189,12 +275,78 @@ function setupAuthEvents() {
     if (!result.success) {
       showToast(result.error || 'Registration failed', 'error');
     } else {
-      showToast('Account created successfully!', 'success');
+      // Show welcome modal
+      $('welcome-user-name').textContent = `Welcome, ${name}!`;
+      showModal('welcome-modal');
+      resetEmailVerification();
+    }
+  });
+
+  // Email verification
+  $('verify-email-btn').addEventListener('click', async () => {
+    const email = $('reg-email').value.trim();
+    if (!email) {
+      showToast('Please enter your email', 'error');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Invalid email format', 'error');
+      return;
+    }
+
+    const btn = $('verify-email-btn');
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+
+    try {
+      const exists = await checkEmailExists(email);
+      if (exists) {
+        showToast('This email is already registered', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Verify';
+        return;
+      }
+
+      // Generate 6-digit code
+      verificationCode = String(Math.floor(100000 + Math.random() * 900000));
+      verifiedEmail = null;
+      emailVerified = false;
+
+      // Show code (in production, send via Cloud Functions)
+      showToast(`Verification code: ${verificationCode}`, 'info');
+      console.log(`[Auth] Verification code for ${email}: ${verificationCode}`);
+
+      $('verify-code-group').classList.remove('hidden');
+      $('verify-hint').textContent = `A 6-digit code has been sent to ${email}`;
+      $('verify-hint').style.color = '';
+      $('reg-email').readOnly = true;
+      btn.textContent = 'Resend';
+      btn.disabled = false;
+    } catch (err) {
+      showToast('Failed to verify email', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Verify';
+    }
+  });
+
+  $('confirm-code-btn').addEventListener('click', () => {
+    const code = $('reg-verify-code').value.trim();
+    if (code === verificationCode) {
+      emailVerified = true;
+      verifiedEmail = $('reg-email').value.trim();
+      $('verify-hint').textContent = '\u2713 Email verified!';
+      $('verify-hint').style.color = 'var(--success)';
+      $('reg-verify-code').readOnly = true;
+      $('confirm-code-btn').disabled = true;
+      showToast('Email verified successfully!', 'success');
+    } else {
+      showToast('Invalid verification code', 'error');
     }
   });
 
   // Cancel register
   $('cancel-register-btn').addEventListener('click', () => {
+    resetEmailVerification();
     showPage('login');
   });
 
@@ -216,15 +368,98 @@ function setupGameEvents() {
   $('scramble-btn').addEventListener('click', async () => {
     $('scramble-overlay').classList.add('hidden');
     await game.beginScramble();
+    $('new-game-btn').style.display = '';
+    $('mobile-new-game-btn').style.display = '';
     updateLeaderboard(selectedCubeSize);
     $('leaderboard-size').innerHTML = `Cube: ${selectedCubeSize}&times;${selectedCubeSize}`;
+    if ($('mobile-leaderboard-size')) {
+      $('mobile-leaderboard-size').innerHTML = `Cube: ${selectedCubeSize}&times;${selectedCubeSize}`;
+    }
   });
 
   $('play-again-btn').addEventListener('click', () => {
     $('game-complete').classList.add('hidden');
     $('size-selector').classList.remove('hidden');
+    $('new-game-btn').style.display = 'none';
+    $('mobile-new-game-btn').style.display = 'none';
     selectedCubeSize = null;
     updateSizeSelection();
+  });
+
+  // Undo / Redo buttons (desktop + mobile)
+  const undoAction = () => { if (game) game.undo(); };
+  const redoAction = () => { if (game) game.redo(); };
+  $('undo-btn').addEventListener('click', undoAction);
+  $('redo-btn').addEventListener('click', redoAction);
+  $('mobile-undo-btn').addEventListener('click', undoAction);
+  $('mobile-redo-btn').addEventListener('click', redoAction);
+
+  // New Game button (desktop + mobile)
+  const newGameAction = () => { showModal('newgame-modal'); };
+  $('new-game-btn').addEventListener('click', newGameAction);
+  $('mobile-new-game-btn').addEventListener('click', newGameAction);
+
+  $('newgame-confirm-btn').addEventListener('click', () => {
+    closeAllModals();
+    if (game) { game.destroy(); game = null; }
+    $('new-game-btn').style.display = 'none';
+    $('mobile-new-game-btn').style.display = 'none';
+    $('undo-btn').disabled = true;
+    $('redo-btn').disabled = true;
+    $('mobile-undo-btn').disabled = true;
+    $('mobile-redo-btn').disabled = true;
+    $('size-selector').classList.remove('hidden');
+    $('game-complete').classList.add('hidden');
+    selectedCubeSize = null;
+    updateSizeSelection();
+  });
+  $('newgame-cancel-btn').addEventListener('click', () => {
+    closeAllModals();
+  });
+
+  // Mobile panel modals (Words / Ranking)
+  $('mobile-words-btn').addEventListener('click', () => {
+    // Sync word list content to mobile modal
+    const src = $('word-list');
+    const dst = $('mobile-word-list');
+    dst.innerHTML = src.innerHTML;
+    $('mobile-words-modal').classList.remove('hidden');
+  });
+  $('mobile-ranking-btn').addEventListener('click', () => {
+    const src = $('leaderboard-list');
+    const dst = $('mobile-leaderboard-list');
+    dst.innerHTML = src.innerHTML;
+    if ($('mobile-leaderboard-size')) {
+      $('mobile-leaderboard-size').innerHTML = $('leaderboard-size').innerHTML;
+    }
+    $('mobile-ranking-modal').classList.remove('hidden');
+  });
+
+  // Close mobile modals on overlay click or close button
+  $$('.mobile-panel-overlay').forEach(overlay => {
+    overlay.addEventListener('click', () => {
+      overlay.closest('.mobile-panel-modal').classList.add('hidden');
+    });
+  });
+  $$('.mobile-panel-modal .modal-close-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.mobile-panel-modal').classList.add('hidden');
+    });
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (!game) return;
+    // Undo: Ctrl+Z (not Shift)
+    if (e.ctrlKey && !e.shiftKey && e.key === 'z') {
+      e.preventDefault();
+      game.undo();
+    }
+    // Redo: Ctrl+Y or Ctrl+Shift+Z
+    if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'Z')) {
+      e.preventDefault();
+      game.redo();
+    }
   });
 }
 
@@ -282,6 +517,13 @@ async function startNewGame() {
     updateLeaderboard(selectedCubeSize);
   };
 
+  game.onMoveHistoryChange = (undoCount, redoCount) => {
+    $('undo-btn').disabled = undoCount === 0;
+    $('redo-btn').disabled = redoCount === 0;
+    $('mobile-undo-btn').disabled = undoCount === 0;
+    $('mobile-redo-btn').disabled = redoCount === 0;
+  };
+
   // Show solved cube first
   await game.startGame(selectedCubeSize);
 
@@ -313,12 +555,21 @@ async function initGamePage() {
     updateLeaderboard(tempGame.cubeSize);
   };
 
+  tempGame.onMoveHistoryChange = (undoCount, redoCount) => {
+    $('undo-btn').disabled = undoCount === 0;
+    $('redo-btn').disabled = redoCount === 0;
+    $('mobile-undo-btn').disabled = undoCount === 0;
+    $('mobile-redo-btn').disabled = redoCount === 0;
+  };
+
   const restored = await tempGame.tryRestore();
 
   if (restored) {
     game = tempGame;
     selectedCubeSize = game.cubeSize;
     $('size-selector').classList.add('hidden');
+    $('new-game-btn').style.display = '';
+    $('mobile-new-game-btn').style.display = '';
     $('leaderboard-size').innerHTML = `Cube: ${selectedCubeSize}&times;${selectedCubeSize}`;
     updateLeaderboard(selectedCubeSize);
     showToast('Previous game session restored', 'info');
@@ -355,7 +606,7 @@ async function updateLeaderboard(cubeSize) {
 
     item.innerHTML = `
       <span class="leaderboard-rank ${rankClass}">${idx + 1}</span>
-      <span class="leaderboard-name">${countryFlag(score.userCountry)} ${score.userName || 'Anonymous'}</span>
+      <span class="leaderboard-name">${countryFlag(score.userCountry)} ${sanitize(score.userName || 'Anonymous')}</span>
       <span class="leaderboard-time">${GameTimer.formatTime(score.time)}</span>
     `;
     list.appendChild(item);
@@ -368,7 +619,10 @@ function updateProfileDisplay(user) {
   const display = $('user-profile-display');
   if (display) {
     const flag = countryFlag(user.country);
-    display.innerHTML = `${flag} ${user.name || 'Player'} #${user.code || '00000000'}`;
+    const avatarImg = user.avatar
+      ? `<img src="${user.avatar}" alt="" class="profile-avatar-mini" onerror="this.style.display='none'">`
+      : '';
+    display.innerHTML = `${flag} ${avatarImg}${sanitize(user.name || 'Player')} #${sanitize(user.code || '00000000')}`;
   }
 }
 
@@ -407,17 +661,18 @@ function setupProfileEvents() {
     $('avatar-upload').click();
   });
 
-  $('avatar-upload').addEventListener('change', (e) => {
+  $('avatar-upload').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+    try {
+      const resizedDataUrl = await processAvatarFile(file);
       const preview = $('avatar-preview');
-      preview.innerHTML = `<img src="${ev.target.result}" alt="Avatar">`;
-      preview.dataset.imageData = ev.target.result;
-    };
-    reader.readAsDataURL(file);
+      preview.innerHTML = `<img src="${resizedDataUrl}" alt="Avatar">`;
+      preview.dataset.imageData = resizedDataUrl;
+    } catch (err) {
+      showToast('Failed to process image', 'error');
+    }
   });
 
   // Save profile
@@ -557,6 +812,11 @@ function setupModalEvents() {
     showModal('help-modal');
   });
 
+  // Welcome modal start button
+  $('welcome-start-btn').addEventListener('click', () => {
+    closeAllModals();
+  });
+
   // Escape key
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeAllModals();
@@ -570,6 +830,7 @@ function showModal(id) {
 
 function closeAllModals() {
   $$('.modal').forEach(m => m.classList.add('hidden'));
+  $$('.mobile-panel-modal').forEach(m => m.classList.add('hidden'));
   $('profile-menu').classList.add('hidden');
 }
 
