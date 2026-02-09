@@ -617,6 +617,7 @@ select.glass-input {
 
 input[type="range"] {
   -webkit-appearance: none;
+  appearance: none;
   width: 140px;
   height: 6px;
   border-radius: 3px;

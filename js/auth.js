@@ -44,7 +44,7 @@ export async function initAuth() {
               id: user.uid,
               email: user.email,
               name: user.displayName || 'Player',
-              country: '🇺🇸',
+              country: 'US',
               code: generateUserCode(),
               avatar: user.photoURL || null,
               createdAt: Date.now()
@@ -80,7 +80,7 @@ export async function register(email, password, displayName) {
         id: cred.user.uid,
         email,
         name: displayName,
-        country: '🇺🇸',
+        country: 'US',
         code: generateUserCode(),
         avatar: null,
         createdAt: Date.now()
@@ -106,7 +106,7 @@ export async function register(email, password, displayName) {
     id: uid,
     email,
     name: displayName,
-    country: '🇺🇸',
+    country: 'US',
     code: generateUserCode(),
     avatar: null,
     password: btoa(password), // Simple encoding for offline (NOT secure, for demo only)
@@ -136,7 +136,7 @@ export async function login(email, password) {
           id: cred.user.uid,
           email: cred.user.email,
           name: cred.user.displayName || 'Player',
-          country: '🇺🇸',
+          country: 'US',
           code: generateUserCode(),
           avatar: cred.user.photoURL || null,
           createdAt: Date.now()

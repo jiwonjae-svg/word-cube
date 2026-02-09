@@ -54,7 +54,7 @@ export class Game {
   // Start a new game with selected cube size
   async startGame(cubeSize) {
     this.cubeSize = cubeSize;
-    this.state = 'playing';
+    this.state = 'ready';
     this.seed = Date.now() % 2147483647;
 
     // Generate puzzle
@@ -71,22 +71,29 @@ export class Game {
     if (this.cube) this.cube.destroy();
     this.cube = new WordCube(this.containerEl, cubeSize);
 
-    // Set initial (solved) letters
+    // Set initial (solved) letters - show to user
     this.cube.setFaceGrids(this.puzzle.solvedFaces);
-
-    // Scramble
-    await this.cube.scramble(this.puzzle.scrambleMoves);
-
-    // Set up rotation callback
-    this.cube.onRotationComplete = (grids) => {
-      this._checkWords(grids);
-    };
 
     // Apply settings
     this._applySettings();
 
     // Render word list
     this._renderWordList();
+
+    return this.puzzle;
+  }
+
+  // After user reviews solved state, scramble and begin
+  async beginScramble() {
+    this.state = 'playing';
+
+    // Animated scramble
+    await this.cube.animatedScramble(this.puzzle.scrambleMoves);
+
+    // Set up rotation callback
+    this.cube.onRotationComplete = (grids) => {
+      this._checkWords(grids);
+    };
 
     // Initial word check (some might be formed after scramble)
     this._checkWords(this.cube.getFaceGrids());
@@ -97,8 +104,6 @@ export class Game {
 
     // Save session
     this._saveSession();
-
-    return this.puzzle;
   }
 
   // Check for found words on current face grids
@@ -173,7 +178,7 @@ export class Game {
       const scoreData = {
         userId: user.id,
         userName: user.name,
-        userCountry: user.country || '🇺🇸',
+        userCountry: user.country || 'US',
         cubeSize: this.cubeSize,
         time: elapsed,
         seed: this.seed,

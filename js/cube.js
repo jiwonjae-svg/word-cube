@@ -69,7 +69,7 @@ export class WordCube {
 
     // Highlight state
     this.highlightedTiles = new Set();
-    this.highlightAnimations = [];
+    this._popOutAnims = new Map(); // mesh -> { originalPos, active }
 
     // Object pooling
     this.geometryPool = null;
@@ -130,6 +130,13 @@ export class WordCube {
     this.cubeGroup.add(coreMesh);
     this._coreGeo = coreGeo;
     this._coreMat = coreMat;
+
+    // Shared material for tile side edges (non-letter faces)
+    this._sideMat = new THREE.MeshStandardMaterial({
+      color: 0xe8e8f0,
+      roughness: 0.5,
+      metalness: 0.05,
+    });
 
     // Set initial orbit rotation
     this.cubeGroup.rotation.set(Math.PI * 0.15, -Math.PI * 0.25, 0);
@@ -247,7 +254,13 @@ export class WordCube {
     // Remove existing tiles
     for (const obj of this.tileMeshes) {
       this.cubeGroup.remove(obj.mesh);
-      if (obj.mesh.material) obj.mesh.material.dispose();
+      if (Array.isArray(obj.mesh.material)) {
+        for (const m of obj.mesh.material) {
+          if (m !== this._sideMat) m.dispose();
+        }
+      } else if (obj.mesh.material) {
+        obj.mesh.material.dispose();
+      }
     }
     this.tileMeshes = [];
 
@@ -259,7 +272,7 @@ export class WordCube {
           const letter = this.faceGrids[fIdx][r][c];
           const texture = this._createTileTexture(letter);
 
-          const material = new THREE.MeshStandardMaterial({
+          const faceMat = new THREE.MeshStandardMaterial({
             map: texture,
             roughness: 0.3,
             metalness: 0.05,
@@ -267,7 +280,14 @@ export class WordCube {
             opacity: 0.95,
           });
 
-          const mesh = new THREE.Mesh(this.geometryPool, material);
+          // BoxGeometry face order: +X, -X, +Y, -Y, +Z (letter), -Z
+          const materials = [
+            this._sideMat, this._sideMat,
+            this._sideMat, this._sideMat,
+            faceMat, this._sideMat
+          ];
+
+          const mesh = new THREE.Mesh(this.geometryPool, materials);
 
           // Position on cube face
           const pos = this._getTilePosition(fIdx, r, c);
@@ -324,6 +344,9 @@ export class WordCube {
   // Apply a slice rotation to the logical state
   rotateSlice(axis, layerIndex, direction, animate = true) {
     if (this.animating) return;
+
+    // Cancel any active pop-out animations to avoid position corruption
+    this._cancelPopOuts();
 
     // Get the world-space coordinate for this layer
     const layerCoord = (layerIndex - (this.n - 1) / 2) * this.tileSize;
@@ -502,9 +525,19 @@ export class WordCube {
         break;
     }
 
-    // Snap quaternion to nearest 90-degree rotation
-    const pos = this._getTilePosition(faceIdx, 0, 0);
-    mesh.quaternion.copy(pos.quaternion);
+    // Snap quaternion preserving in-plane rotation
+    const canonQuat = this._getTilePosition(faceIdx, 0, 0).quaternion;
+    const canonX = new THREE.Vector3(1, 0, 0).applyQuaternion(canonQuat);
+    const canonY = new THREE.Vector3(0, 1, 0).applyQuaternion(canonQuat);
+    const tileX = new THREE.Vector3(1, 0, 0).applyQuaternion(mesh.quaternion);
+    const dotX = tileX.dot(canonX);
+    const dotY = tileX.dot(canonY);
+    const angle = Math.atan2(dotY, dotX);
+    const snappedAngle = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+    const inPlaneRot = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 0, 1), snappedAngle
+    );
+    mesh.quaternion.copy(canonQuat.clone().multiply(inPlaneRot));
   }
 
   // Update logical state from mesh positions/letters
@@ -610,6 +643,76 @@ export class WordCube {
     this._updateStateFromMeshes();
   }
 
+  // Animated scramble: shows each move with fast animation
+  async animatedScramble(moves, moveDuration = 100) {
+    const savedCallback = this.onRotationComplete;
+    this.onRotationComplete = null;
+
+    for (const move of moves) {
+      const layerCoord = (move.layer - (this.n - 1) / 2) * this.tileSize;
+      const sliceTiles = this.tileMeshes.filter(t => {
+        const p = t.mesh.position;
+        const coord = move.axis === 0 ? p.x : move.axis === 1 ? p.y : p.z;
+        return Math.abs(coord - layerCoord) < this.tileSize * 0.4;
+      });
+
+      if (sliceTiles.length === 0) continue;
+
+      await new Promise(resolve => {
+        this.animating = true;
+        this.sliceGroup = new THREE.Group();
+        this.cubeGroup.add(this.sliceGroup);
+
+        for (const t of sliceTiles) {
+          this.cubeGroup.remove(t.mesh);
+          this.sliceGroup.add(t.mesh);
+        }
+
+        const rotAxis = new THREE.Vector3(
+          move.axis === 0 ? 1 : 0,
+          move.axis === 1 ? 1 : 0,
+          move.axis === 2 ? 1 : 0
+        );
+        const targetAngle = move.direction * (Math.PI / 2);
+        const startQuat = this.sliceGroup.quaternion.clone();
+        const endQuat = new THREE.Quaternion().setFromAxisAngle(rotAxis, targetAngle);
+        const startTime = performance.now();
+
+        const anim = () => {
+          if (!this.renderer || !this.sliceGroup) {
+            this.animating = false;
+            resolve();
+            return;
+          }
+          const elapsed = performance.now() - startTime;
+          const p = Math.min(elapsed / moveDuration, 1);
+          const ease = 1 - Math.pow(1 - p, 3);
+          this.sliceGroup.quaternion.copy(startQuat).slerp(endQuat, ease);
+
+          if (p < 1) {
+            requestAnimationFrame(anim);
+          } else {
+            const rotMatrix = new THREE.Matrix4().makeRotationAxis(rotAxis, targetAngle);
+            for (const t of sliceTiles) {
+              t.mesh.applyMatrix4(rotMatrix);
+              this._snapPosition(t.mesh);
+              this.sliceGroup.remove(t.mesh);
+              this.cubeGroup.add(t.mesh);
+            }
+            this.cubeGroup.remove(this.sliceGroup);
+            this.sliceGroup = null;
+            this.animating = false;
+            resolve();
+          }
+        };
+        requestAnimationFrame(anim);
+      });
+    }
+
+    this._updateStateFromMeshes();
+    this.onRotationComplete = savedCallback;
+  }
+
   // Highlight specific tiles (neon glow + pop out)
   highlightTiles(tilesToHighlight) {
     // tilesToHighlight: [{faceIdx, row, col}]
@@ -623,10 +726,11 @@ export class WordCube {
       if (highlightSet.has(key)) {
         const letter = t.mesh.userData.letter;
         const glowTexture = this._createTileTexture(letter, true);
-        t.mesh.material.map = glowTexture;
-        t.mesh.material.emissive = new THREE.Color(0x00ffd5);
-        t.mesh.material.emissiveIntensity = 0.3;
-        t.mesh.material.needsUpdate = true;
+        const mat = Array.isArray(t.mesh.material) ? t.mesh.material[4] : t.mesh.material;
+        mat.map = glowTexture;
+        mat.emissive = new THREE.Color(0x00ffd5);
+        mat.emissiveIntensity = 0.3;
+        mat.needsUpdate = true;
 
         this.highlightedTiles.add(key);
 
@@ -638,14 +742,14 @@ export class WordCube {
 
   clearHighlights() {
     for (const t of this.tileMeshes) {
-      const key = `${t.faceIdx}-${t.row}-${t.col}`;
-      if (this.highlightedTiles.has(key)) {
+      const mat = Array.isArray(t.mesh.material) ? t.mesh.material[4] : t.mesh.material;
+      if (mat.emissiveIntensity > 0) {
         const letter = t.mesh.userData.letter;
         const normalTexture = this._createTileTexture(letter, false);
-        t.mesh.material.map = normalTexture;
-        t.mesh.material.emissive = new THREE.Color(0x000000);
-        t.mesh.material.emissiveIntensity = 0;
-        t.mesh.material.needsUpdate = true;
+        mat.map = normalTexture;
+        mat.emissive = new THREE.Color(0x000000);
+        mat.emissiveIntensity = 0;
+        mat.needsUpdate = true;
       }
     }
     this.highlightedTiles.clear();
@@ -658,20 +762,25 @@ export class WordCube {
     const popDistance = this.tileSize * 0.3;
     const popPos = originalPos.clone().add(normal.multiplyScalar(popDistance));
 
+    const animState = { originalPos, active: true };
+    this._popOutAnims.set(mesh, animState);
+
     const duration = 600;
     const startTime = performance.now();
 
     const animate = () => {
+      if (!animState.active) {
+        mesh.position.copy(animState.originalPos);
+        return;
+      }
       const elapsed = performance.now() - startTime;
       const t = Math.min(elapsed / duration, 1);
 
       if (t < 0.4) {
-        // Pop out
         const ease = t / 0.4;
         const smooth = ease * ease * (3 - 2 * ease);
         mesh.position.lerpVectors(originalPos, popPos, smooth);
       } else {
-        // Pop back
         const ease = (t - 0.4) / 0.6;
         const smooth = ease * ease * (3 - 2 * ease);
         mesh.position.lerpVectors(popPos, originalPos, smooth);
@@ -681,9 +790,18 @@ export class WordCube {
         requestAnimationFrame(animate);
       } else {
         mesh.position.copy(originalPos);
+        this._popOutAnims.delete(mesh);
       }
     };
     requestAnimationFrame(animate);
+  }
+
+  _cancelPopOuts() {
+    for (const [mesh, state] of this._popOutAnims) {
+      state.active = false;
+      mesh.position.copy(state.originalPos);
+    }
+    this._popOutAnims.clear();
   }
 
   // ===== Event Handling =====
@@ -811,25 +929,25 @@ export class WordCube {
 
       switch (face) {
         case 0: // Front: horizontal → Y-axis rotation
-          axis = 1; layer = this.dragRow;
+          axis = 1; layer = this.n - 1 - this.dragRow;
           direction = -direction;
           break;
         case 1: // Back
-          axis = 1; layer = this.dragRow;
+          axis = 1; layer = this.n - 1 - this.dragRow;
           break;
         case 2: // Up: horizontal → Z-axis rotation
           axis = 2; layer = this.dragRow;
           break;
         case 3: // Down
-          axis = 2; layer = this.dragRow;
+          axis = 2; layer = this.n - 1 - this.dragRow;
           direction = -direction;
           break;
         case 4: // Left: horizontal → Y-axis rotation
-          axis = 1; layer = this.dragRow;
+          axis = 1; layer = this.n - 1 - this.dragRow;
           direction = -direction;
           break;
         case 5: // Right
-          axis = 1; layer = this.dragRow;
+          axis = 1; layer = this.n - 1 - this.dragRow;
           direction = -direction;
           break;
       }
@@ -916,11 +1034,19 @@ export class WordCube {
 
     // Dispose geometries and materials
     for (const t of this.tileMeshes) {
-      if (t.mesh.material) {
+      if (Array.isArray(t.mesh.material)) {
+        for (const mat of t.mesh.material) {
+          if (mat !== this._sideMat) {
+            if (mat.map) mat.map.dispose();
+            mat.dispose();
+          }
+        }
+      } else if (t.mesh.material) {
         if (t.mesh.material.map) t.mesh.material.map.dispose();
         t.mesh.material.dispose();
       }
     }
+    if (this._sideMat) this._sideMat.dispose();
     if (this.geometryPool) this.geometryPool.dispose();
     if (this._coreGeo) this._coreGeo.dispose();
     if (this._coreMat) this._coreMat.dispose();

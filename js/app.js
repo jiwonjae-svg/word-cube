@@ -17,6 +17,13 @@ let gamePageInitialized = false;
 const $ = (id) => document.getElementById(id);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+// ===== Country Flag Helper =====
+function countryFlag(code) {
+  if (!code || code.length !== 2) return code || '';
+  const lower = code.toLowerCase();
+  return `<img src="https://flagcdn.com/16x12/${lower}.png" alt="${code}" style="vertical-align:middle;margin-right:2px;" onerror="this.replaceWith(document.createTextNode('${code}'))">`;
+}
+
 // Pages
 const loginPage = $('login-page');
 const registerPage = $('register-page');
@@ -206,6 +213,13 @@ function setupAuthEvents() {
 function setupGameEvents() {
   $('start-game-btn').addEventListener('click', startNewGame);
 
+  $('scramble-btn').addEventListener('click', async () => {
+    $('scramble-overlay').classList.add('hidden');
+    await game.beginScramble();
+    updateLeaderboard(selectedCubeSize);
+    $('leaderboard-size').innerHTML = `Cube: ${selectedCubeSize}&times;${selectedCubeSize}`;
+  });
+
   $('play-again-btn').addEventListener('click', () => {
     $('game-complete').classList.add('hidden');
     $('size-selector').classList.remove('hidden');
@@ -243,6 +257,7 @@ function updateSizeSelection() {
 async function startNewGame() {
   if (!selectedCubeSize) return;
 
+  if (game) { game.destroy(); game = null; }
   $('size-selector').classList.add('hidden');
 
   // Initialize game
@@ -267,7 +282,11 @@ async function startNewGame() {
     updateLeaderboard(selectedCubeSize);
   };
 
+  // Show solved cube first
   await game.startGame(selectedCubeSize);
+
+  // Show scramble overlay so user can review solved state
+  $('scramble-overlay').classList.remove('hidden');
 
   // Update leaderboard
   updateLeaderboard(selectedCubeSize);
@@ -336,7 +355,7 @@ async function updateLeaderboard(cubeSize) {
 
     item.innerHTML = `
       <span class="leaderboard-rank ${rankClass}">${idx + 1}</span>
-      <span class="leaderboard-name">${score.userCountry || '🌐'} ${score.userName || 'Anonymous'}</span>
+      <span class="leaderboard-name">${countryFlag(score.userCountry)} ${score.userName || 'Anonymous'}</span>
       <span class="leaderboard-time">${GameTimer.formatTime(score.time)}</span>
     `;
     list.appendChild(item);
@@ -348,7 +367,8 @@ function updateProfileDisplay(user) {
   if (!user) return;
   const display = $('user-profile-display');
   if (display) {
-    display.textContent = `${user.country || '🌐'} ${user.name || 'Player'} #${user.code || '00000000'}`;
+    const flag = countryFlag(user.country);
+    display.innerHTML = `${flag} ${user.name || 'Player'} #${user.code || '00000000'}`;
   }
 }
 
@@ -430,7 +450,7 @@ function openProfileEditModal() {
   if (!user) return;
 
   $('edit-name').value = user.name || '';
-  $('edit-country').value = user.country || '🇺🇸';
+  $('edit-country').value = user.country || 'US';
 
   const preview = $('avatar-preview');
   if (user.avatar) {

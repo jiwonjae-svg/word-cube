@@ -119,6 +119,13 @@
             <button id="play-again-btn" class="glass-btn primary-btn">Play Again</button>
           </div>
         </div>
+
+        <!-- Scramble Overlay -->
+        <div id="scramble-overlay" class="size-selector glass-panel hidden">
+          <h2>Ready?</h2>
+          <p style="margin-bottom:20px;color:var(--text-light);font-size:14px;">Review the solved cube and word list, then scramble!</p>
+          <button id="scramble-btn" class="glass-btn primary-btn large-btn">Scramble &amp; Start!</button>
+        </div>
       </section>
 
       <!-- Word List Panel -->
@@ -243,21 +250,21 @@
         <div class="input-group">
           <label>Country</label>
           <select id="edit-country" class="glass-input">
-            <option value="🇺🇸">🇺🇸 United States</option>
-            <option value="🇬🇧">🇬🇧 United Kingdom</option>
-            <option value="🇰🇷">🇰🇷 South Korea</option>
-            <option value="🇯🇵">🇯🇵 Japan</option>
-            <option value="🇩🇪">🇩🇪 Germany</option>
-            <option value="🇫🇷">🇫🇷 France</option>
-            <option value="🇨🇳">🇨🇳 China</option>
-            <option value="🇧🇷">🇧🇷 Brazil</option>
-            <option value="🇮🇳">🇮🇳 India</option>
-            <option value="🇨🇦">🇨🇦 Canada</option>
-            <option value="🇦🇺">🇦🇺 Australia</option>
-            <option value="🇪🇸">🇪🇸 Spain</option>
-            <option value="🇮🇹">🇮🇹 Italy</option>
-            <option value="🇲🇽">🇲🇽 Mexico</option>
-            <option value="🇷🇺">🇷🇺 Russia</option>
+            <option value="US">US - United States</option>
+            <option value="GB">GB - United Kingdom</option>
+            <option value="KR">KR - South Korea</option>
+            <option value="JP">JP - Japan</option>
+            <option value="DE">DE - Germany</option>
+            <option value="FR">FR - France</option>
+            <option value="CN">CN - China</option>
+            <option value="BR">BR - Brazil</option>
+            <option value="IN">IN - India</option>
+            <option value="CA">CA - Canada</option>
+            <option value="AU">AU - Australia</option>
+            <option value="ES">ES - Spain</option>
+            <option value="IT">IT - Italy</option>
+            <option value="MX">MX - Mexico</option>
+            <option value="RU">RU - Russia</option>
           </select>
         </div>
         <button id="save-profile-btn" class="glass-btn primary-btn">Save</button>
