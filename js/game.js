@@ -226,12 +226,23 @@ export class Game {
     // Save score
     const user = getCurrentUser();
     if (user && valid) {
+      // Validate score data shape before writing
+      const sanitizedName = typeof user.name === 'string' ? user.name.slice(0, 30) : 'Player';
+      const sanitizedCountry = typeof user.country === 'string' && /^[A-Z]{2}$/i.test(user.country) ? user.country.toUpperCase() : 'US';
+
+      if (typeof elapsed !== 'number' || elapsed <= 0 || elapsed > 86400) {
+        console.warn('[Game] Invalid elapsed time, skipping score save');
+        this._clearSession();
+        if (this.onGameComplete) this.onGameComplete(elapsed, false);
+        return;
+      }
+
       const scoreData = {
         userId: user.id,
-        userName: user.name,
-        userCountry: user.country || 'US',
+        userName: sanitizedName,
+        userCountry: sanitizedCountry,
         cubeSize: this.cubeSize,
-        time: elapsed,
+        time: Math.round(elapsed * 1000) / 1000, // max 3 decimal places
         seed: this.seed,
         date: new Date().toISOString(),
         valid: true

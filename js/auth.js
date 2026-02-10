@@ -10,6 +10,30 @@ const USER_SESSION_KEY = 'wordcube_user_session';
 let currentUser = null;
 let onAuthChangeCallbacks = [];
 
+// ===== Rate Limiting =====
+const rateLimitMap = new Map();
+function checkRateLimit(action, maxAttempts = 5, windowMs = 60000) {
+  const now = Date.now();
+  const key = action;
+  if (!rateLimitMap.has(key)) rateLimitMap.set(key, []);
+  const attempts = rateLimitMap.get(key).filter(t => now - t < windowMs);
+  if (attempts.length >= maxAttempts) {
+    return false; // rate limited
+  }
+  attempts.push(now);
+  rateLimitMap.set(key, attempts);
+  return true;
+}
+
+// ===== Secure Password Hashing (offline mode) =====
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password + 'wordcube_salt_2024');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // Map Firebase error codes to user-friendly messages
 function friendlyError(firebaseMessage) {
   const code = firebaseMessage.match(/\(([^)]+)\)/)?.[1] || '';
@@ -90,6 +114,10 @@ export async function initAuth() {
 
 // Register with email/password
 export async function register(email, password, displayName) {
+  if (!checkRateLimit('register', 3, 60000)) {
+    return { success: false, error: 'Too many registration attempts. Please wait a minute.' };
+  }
+
   if (getIsOnline() && getFirebaseAuth()) {
     try {
       const { createUserWithEmailAndPassword, updateProfile } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
@@ -122,6 +150,7 @@ export async function register(email, password, displayName) {
   }
 
   const uid = generateId();
+  const hashedPw = await hashPassword(password);
   const profile = {
     id: uid,
     email,
@@ -129,7 +158,7 @@ export async function register(email, password, displayName) {
     country: 'US',
     code: generateUserCode(),
     avatar: null,
-    password: btoa(password), // Simple encoding for offline (NOT secure, for demo only)
+    password: hashedPw,
     createdAt: Date.now()
   };
 
@@ -146,6 +175,10 @@ export async function register(email, password, displayName) {
 
 // Login with email/password
 export async function login(email, password) {
+  if (!checkRateLimit('login', 5, 60000)) {
+    return { success: false, error: 'Too many login attempts. Please wait a minute.' };
+  }
+
   if (getIsOnline() && getFirebaseAuth()) {
     try {
       const { signInWithEmailAndPassword } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
@@ -174,9 +207,17 @@ export async function login(email, password) {
 
   // Offline login
   const existingUsers = JSON.parse(localStorage.getItem('wordcube_offline_users') || '[]');
-  const user = existingUsers.find(u => u.email === email && atob(u.password) === password);
+  const hashedPw = await hashPassword(password);
+  // Support both old btoa and new SHA-256 hashed passwords
+  const user = existingUsers.find(u => u.email === email && (u.password === hashedPw || (u.password.length < 64 && (() => { try { return atob(u.password) === password; } catch { return false; } })())));
   if (!user) {
     return { success: false, error: 'Invalid email or password' };
+  }
+
+  // Migrate old btoa passwords to SHA-256 hash
+  if (user.password !== hashedPw) {
+    user.password = hashedPw;
+    localStorage.setItem('wordcube_offline_users', JSON.stringify(existingUsers));
   }
 
   const { password: _, ...safeProfile } = user;

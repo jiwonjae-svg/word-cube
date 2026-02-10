@@ -22,9 +22,9 @@ const $$ = (sel) => document.querySelectorAll(sel);
 
 // ===== Country Flag Helper =====
 function countryFlag(code) {
-  if (!code || code.length !== 2) return code || '';
+  if (!code || typeof code !== 'string' || code.length !== 2 || !/^[a-zA-Z]{2}$/.test(code)) return sanitize(code || '');
   const lower = code.toLowerCase();
-  return `<img src="https://flagcdn.com/16x12/${lower}.png" alt="${code}" style="vertical-align:middle;margin-right:2px;" onerror="this.replaceWith(document.createTextNode('${code}'))">`;
+  return `<img src="https://flagcdn.com/16x12/${lower}.png" alt="${sanitize(code)}" style="vertical-align:middle;margin-right:2px;" onerror="this.style.display='none'">`;
 }
 
 // ===== Security: HTML Sanitization =====
