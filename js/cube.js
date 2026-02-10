@@ -122,18 +122,7 @@ export class WordCube {
     const tileW = this.tileSize - this.gap;
     this.geometryPool = new THREE.BoxGeometry(tileW, tileW, 0.06);
 
-    // Core cube (dark interior visible through gaps)
-    const coreSize = this.cubeWorldSize - 0.02;
-    const coreMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
-      roughness: 0.9,
-      metalness: 0.1
-    });
-    const coreGeo = new THREE.BoxGeometry(coreSize, coreSize, coreSize);
-    const coreMesh = new THREE.Mesh(coreGeo, coreMat);
-    this.cubeGroup.add(coreMesh);
-    this._coreGeo = coreGeo;
-    this._coreMat = coreMat;
+    // (Core box removed — no dark interior visible through gaps)
 
     // Shared material for tile side edges (non-letter faces)
     this._sideMat = new THREE.MeshStandardMaterial({
@@ -904,15 +893,17 @@ export class WordCube {
     if (dist < 8) return; // Dead zone
 
     const sens = this.sensitivity / 5;
-    const inv = this.invertRotation ? -1 : 1;
+    // Cube manipulation inversion is OPPOSITE to orbit inversion
+    const cubeInv = this.invertRotation ? -1 : 1;
+    const orbitInv = this.invertRotation ? 1 : -1;
 
     if (this.isDragging && !this.isRotatingSlice) {
       // Determine rotation axis based on drag direction relative to face
       this.isRotatingSlice = true;
-      this._determineSliceRotation(dx, dy, sens, inv);
+      this._determineSliceRotation(dx, dy, sens, cubeInv);
     } else if (this.isOrbiting) {
       // Orbit rotation
-      const rotSpeed = 0.006 * sens * inv;
+      const rotSpeed = 0.006 * sens * orbitInv;
       const xAngle = -dy * rotSpeed;
       const yAngle = -dx * rotSpeed;
 
@@ -1084,8 +1075,7 @@ export class WordCube {
     }
     if (this._sideMat) this._sideMat.dispose();
     if (this.geometryPool) this.geometryPool.dispose();
-    if (this._coreGeo) this._coreGeo.dispose();
-    if (this._coreMat) this._coreMat.dispose();
+
 
     // Dispose cached textures
     for (const key of Object.keys(this.textureCache)) {
@@ -1126,11 +1116,8 @@ export class BackgroundCubes {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+    const ambient = new THREE.AmbientLight(0xffffff, 1.0);
     this.scene.add(ambient);
-    const dir = new THREE.DirectionalLight(0xffffff, 0.5);
-    dir.position.set(5, 8, 10);
-    this.scene.add(dir);
 
     // Create several small cubes
     this._spawnCubes(6);
@@ -1155,10 +1142,11 @@ export class BackgroundCubes {
       const n = 3; // mini cubes are always 3x3
       const group = new THREE.Group();
 
-      // Create mini cube faces
+      // Create mini cube faces — store tile meshes for slice rotation
       const tileSize = size / n;
       const half = size / 2;
       const gap = 0.03;
+      const tiles = []; // all tile meshes for this mini cube
 
       for (let f = 0; f < 6; f++) {
         for (let r = 0; r < n; r++) {
@@ -1167,15 +1155,13 @@ export class BackgroundCubes {
             const canvasEl = this._miniTileTexture(letter, 128);
             const texture = new THREE.CanvasTexture(canvasEl);
 
-            const mat = new THREE.MeshStandardMaterial({
+            const mat = new THREE.MeshBasicMaterial({
               map: texture,
-              roughness: 0.4,
-              metalness: 0.05,
               transparent: true,
               opacity: 0.7
             });
 
-            const geo = new THREE.BoxGeometry(tileSize - gap, tileSize - gap, 0.04);
+            const geo = new THREE.PlaneGeometry(tileSize - gap, tileSize - gap);
             const mesh = new THREE.Mesh(geo, mat);
 
             const offset = (idx) => (idx - (n - 1) / 2) * tileSize;
@@ -1205,18 +1191,10 @@ export class BackgroundCubes {
             }
 
             group.add(mesh);
+            tiles.push(mesh);
           }
         }
       }
-
-      // Core
-      const coreMat = new THREE.MeshStandardMaterial({
-        color: 0x334155,
-        roughness: 0.9,
-        transparent: true,
-        opacity: 0.5
-      });
-      group.add(new THREE.Mesh(new THREE.BoxGeometry(size - 0.02, size - 0.02, size - 0.02), coreMat));
 
       // Random position
       group.position.set(
@@ -1235,15 +1213,31 @@ export class BackgroundCubes {
       this.scene.add(group);
       this.cubes.push({
         group,
+        tiles,
+        n,
+        tileSize,
+        size,
         rotSpeed: {
-          x: (Math.random() - 0.5) * 0.01,
-          y: (Math.random() - 0.5) * 0.01,
-          z: (Math.random() - 0.5) * 0.005
+          x: (Math.random() - 0.5) * 0.004,
+          y: (Math.random() - 0.5) * 0.004,
+          z: (Math.random() - 0.5) * 0.002
         },
         opacity: 0.7,
         fadeDir: -1,
         fadeSpeed: 0.0003 + Math.random() * 0.0005,
-        respawnTimer: 0
+        // Slice rotation state
+        sliceAnimating: false,
+        sliceGroup: null,
+        sliceStartTime: 0,
+        sliceDuration: 800 + Math.random() * 400, // 800-1200ms per rotation (slow)
+        sliceRotAxis: null,
+        sliceTargetAngle: 0,
+        sliceStartQuat: null,
+        sliceEndQuat: null,
+        sliceTiles: [],
+        // Delay between slice rotations
+        sliceDelay: 1500 + Math.random() * 2000, // 1.5-3.5s between moves
+        sliceNextTime: performance.now() + 1000 + Math.random() * 3000 // first move after 1-4s
       });
     }
   }
@@ -1254,10 +1248,15 @@ export class BackgroundCubes {
     canvas.height = size;
     const ctx = canvas.getContext('2d');
 
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    // Uniform muted gray background — no bright white
+    ctx.fillStyle = '#b8c0cc';
+    ctx.fillRect(0, 0, size, size);
+
+    // Slightly lighter inner area for subtle tile border
+    ctx.fillStyle = '#c8ced8';
     ctx.fillRect(4, 4, size - 8, size - 8);
 
-    ctx.fillStyle = '#475569';
+    ctx.fillStyle = '#5a6577';
     ctx.font = `bold ${size * 0.5}px Inter, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1266,17 +1265,107 @@ export class BackgroundCubes {
     return canvas;
   }
 
+  // Start a random slice rotation on a mini cube
+  _startSliceRotation(cube) {
+    const { n, tileSize, group, tiles } = cube;
+
+    // Pick random axis (0=X, 1=Y, 2=Z) and layer (0 to n-1)
+    const axis = Math.floor(Math.random() * 3);
+    const layerIndex = Math.floor(Math.random() * n);
+    const direction = Math.random() < 0.5 ? 1 : -1;
+    const layerCoord = (layerIndex - (n - 1) / 2) * tileSize;
+
+    // Find tiles in this slice (with a threshold)
+    const sliceTiles = tiles.filter(mesh => {
+      const coord = axis === 0 ? mesh.position.x : axis === 1 ? mesh.position.y : mesh.position.z;
+      return Math.abs(coord - layerCoord) < tileSize * 0.55;
+    });
+
+    if (sliceTiles.length === 0) return;
+
+    // Create temp group for rotation
+    const sliceGroup = new THREE.Group();
+    group.add(sliceGroup);
+
+    for (const mesh of sliceTiles) {
+      group.remove(mesh);
+      sliceGroup.add(mesh);
+    }
+
+    const rotAxis = new THREE.Vector3(
+      axis === 0 ? 1 : 0,
+      axis === 1 ? 1 : 0,
+      axis === 2 ? 1 : 0
+    );
+    const targetAngle = direction * (Math.PI / 2);
+
+    cube.sliceAnimating = true;
+    cube.sliceGroup = sliceGroup;
+    cube.sliceTiles = sliceTiles;
+    cube.sliceRotAxis = rotAxis;
+    cube.sliceTargetAngle = targetAngle;
+    cube.sliceStartQuat = sliceGroup.quaternion.clone();
+    cube.sliceEndQuat = new THREE.Quaternion().setFromAxisAngle(rotAxis, targetAngle);
+    cube.sliceStartTime = performance.now();
+  }
+
+  // Update ongoing slice animation
+  _updateSliceRotation(cube, now) {
+    const elapsed = now - cube.sliceStartTime;
+    const t = Math.min(elapsed / cube.sliceDuration, 1);
+    // Ease in-out cubic
+    const ease = t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    cube.sliceGroup.quaternion.copy(cube.sliceStartQuat).slerp(cube.sliceEndQuat, ease);
+
+    if (t >= 1) {
+      // Finalize: apply rotation and reparent tiles back
+      const rotMatrix = new THREE.Matrix4().makeRotationAxis(cube.sliceRotAxis, cube.sliceTargetAngle);
+      const { tileSize } = cube;
+
+      for (const mesh of cube.sliceTiles) {
+        mesh.applyMatrix4(rotMatrix);
+        // Snap positions to grid
+        mesh.position.x = Math.round(mesh.position.x / tileSize * 100) / 100 * tileSize;
+        mesh.position.y = Math.round(mesh.position.y / tileSize * 100) / 100 * tileSize;
+        mesh.position.z = Math.round(mesh.position.z / tileSize * 100) / 100 * tileSize;
+
+        cube.sliceGroup.remove(mesh);
+        cube.group.add(mesh);
+      }
+
+      cube.group.remove(cube.sliceGroup);
+      cube.sliceGroup = null;
+      cube.sliceAnimating = false;
+      cube.sliceTiles = [];
+      // Schedule next rotation with random delay
+      cube.sliceDelay = 1500 + Math.random() * 2000;
+      cube.sliceNextTime = now + cube.sliceDelay;
+    }
+  }
+
   _animate() {
     if (!this.running) return;
     requestAnimationFrame(() => this._animate());
 
+    const now = performance.now();
+
     for (const cube of this.cubes) {
-      // Rotate
+      // Gentle whole-cube rotation (orbit)
       cube.group.rotation.x += cube.rotSpeed.x;
       cube.group.rotation.y += cube.rotSpeed.y;
       cube.group.rotation.z += cube.rotSpeed.z;
 
-      // Fade out and respawn
+      // Slice rotation logic
+      if (cube.sliceAnimating) {
+        this._updateSliceRotation(cube, now);
+      } else if (now >= cube.sliceNextTime) {
+        this._startSliceRotation(cube);
+      }
+
+      // Fade in/out and respawn
       cube.opacity += cube.fadeDir * cube.fadeSpeed;
 
       if (cube.opacity <= 0) {
@@ -1289,9 +1378,9 @@ export class BackgroundCubes {
           (Math.random() - 0.5) * 8
         );
         cube.rotSpeed = {
-          x: (Math.random() - 0.5) * 0.01,
-          y: (Math.random() - 0.5) * 0.01,
-          z: (Math.random() - 0.5) * 0.005
+          x: (Math.random() - 0.5) * 0.004,
+          y: (Math.random() - 0.5) * 0.004,
+          z: (Math.random() - 0.5) * 0.002
         };
       } else if (cube.opacity >= 0.7) {
         cube.opacity = 0.7;
@@ -1313,8 +1402,15 @@ export class BackgroundCubes {
     this.running = false;
     window.removeEventListener('resize', this._resizeHandler);
 
-    // Dispose all cube resources
+    // Finalize any in-progress slice animations
     for (const cube of this.cubes) {
+      if (cube.sliceAnimating && cube.sliceGroup) {
+        for (const mesh of cube.sliceTiles) {
+          cube.sliceGroup.remove(mesh);
+          cube.group.add(mesh);
+        }
+        cube.group.remove(cube.sliceGroup);
+      }
       cube.group.traverse(child => {
         if (child.isMesh) {
           if (child.geometry) child.geometry.dispose();

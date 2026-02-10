@@ -10,6 +10,26 @@ const USER_SESSION_KEY = 'wordcube_user_session';
 let currentUser = null;
 let onAuthChangeCallbacks = [];
 
+// Map Firebase error codes to user-friendly messages
+function friendlyError(firebaseMessage) {
+  const code = firebaseMessage.match(/\(([^)]+)\)/)?.[1] || '';
+  const map = {
+    'auth/email-already-in-use': 'This email is already registered. Please log in or use a different email.',
+    'auth/invalid-email': 'Please enter a valid email address.',
+    'auth/weak-password': 'Password is too weak. Please use at least 6 characters.',
+    'auth/user-not-found': 'No account found with this email address.',
+    'auth/wrong-password': 'Incorrect password. Please try again.',
+    'auth/invalid-credential': 'Invalid email or password. Please try again.',
+    'auth/too-many-requests': 'Too many attempts. Please try again later.',
+    'auth/network-request-failed': 'Network error. Please check your connection.',
+    'auth/popup-closed-by-user': 'Sign-in popup was closed. Please try again.',
+    'auth/account-exists-with-different-credential': 'An account with this email already exists using a different sign-in method.',
+    'auth/requires-recent-login': 'Please log in again to perform this action.',
+    'auth/user-disabled': 'This account has been disabled. Please contact support.',
+  };
+  return map[code] || firebaseMessage.replace(/^Firebase:\s*/i, '').replace(/\s*\([^)]*\)\.?\s*$/, '') || 'An error occurred. Please try again.';
+}
+
 // Generate a unique 8-character code for user profile display
 function generateUserCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -91,7 +111,7 @@ export async function register(email, password, displayName) {
       notifyAuthChange();
       return { success: true, user: currentUser };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: friendlyError(err.message) };
     }
   }
 
@@ -148,7 +168,7 @@ export async function login(email, password) {
       notifyAuthChange();
       return { success: true, user: currentUser };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: friendlyError(err.message) };
     }
   }
 
@@ -170,13 +190,14 @@ export async function login(email, password) {
 export async function loginWithGoogle() {
   if (getIsOnline() && getFirebaseAuth()) {
     try {
-      const { GoogleAuthProvider, signInWithPopup } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      const { GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(getFirebaseAuth(), provider);
-      // Profile will be handled by auth state listener
-      return { success: true };
+      const additionalInfo = getAdditionalUserInfo(result);
+      const isNewUser = additionalInfo ? additionalInfo.isNewUser : false;
+      return { success: true, isNewUser };
     } catch (err) {
-      return { success: false, error: err.message };
+      return { success: false, error: friendlyError(err.message) };
     }
   }
 
@@ -213,6 +234,59 @@ export async function updateProfile(updates) {
 // Get current user
 export function getCurrentUser() {
   return currentUser;
+}
+
+// Send password reset email
+export async function sendPasswordReset(email) {
+  if (getIsOnline() && getFirebaseAuth()) {
+    try {
+      const { sendPasswordResetEmail } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      await sendPasswordResetEmail(getFirebaseAuth(), email);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: friendlyError(err.message) };
+    }
+  }
+  return { success: false, error: 'Password reset requires Firebase configuration (online mode)' };
+}
+
+// Send Firebase email verification to current user
+export async function sendVerificationEmail() {
+  if (getIsOnline() && getFirebaseAuth()) {
+    try {
+      const { sendEmailVerification } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      const user = getFirebaseAuth().currentUser;
+      if (user) {
+        await sendEmailVerification(user);
+        return { success: true };
+      }
+      return { success: false, error: 'No authenticated user' };
+    } catch (err) {
+      return { success: false, error: friendlyError(err.message) };
+    }
+  }
+  return { success: false, error: 'Email verification requires Firebase configuration (online mode)' };
+}
+
+// Check if current user's email is verified
+export function isEmailVerified() {
+  if (getIsOnline() && getFirebaseAuth()) {
+    const user = getFirebaseAuth().currentUser;
+    return user ? user.emailVerified : false;
+  }
+  return true; // Offline mode: skip verification
+}
+
+// Reload current user to refresh emailVerified status
+export async function reloadCurrentUser() {
+  if (getIsOnline() && getFirebaseAuth()) {
+    const user = getFirebaseAuth().currentUser;
+    if (user) {
+      await user.reload();
+      return user.emailVerified;
+    }
+  }
+  return false;
 }
 
 // Check if email is already registered

@@ -382,10 +382,21 @@ export class Game {
   }
 
   // ===== Leaderboard =====
-  static async getLeaderboard(cubeSize, limit = 10) {
+  static async getLeaderboard(cubeSize, limit = 10, mode = 'alltime') {
     try {
+      const where = [{ field: 'cubeSize', op: '==', value: cubeSize }];
+
+      if (mode === 'daily') {
+        // UTC today: YYYY-MM-DDT00:00:00.000Z to YYYY-MM-DDT23:59:59.999Z
+        const now = new Date();
+        const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+        const tomorrowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+        where.push({ field: 'date', op: '>=', value: todayStart });
+        where.push({ field: 'date', op: '<', value: tomorrowStart });
+      }
+
       const results = await queryCollection('scores', {
-        where: [{ field: 'cubeSize', op: '==', value: cubeSize }],
+        where,
         orderBy: { field: 'time', direction: 'asc' },
         limit
       });

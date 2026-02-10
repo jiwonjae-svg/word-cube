@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Word Cube - 3D Puzzle Game</title>
+  <link rel="icon" type="image/x-icon" href="favicon/favicon.ico">
+  <link rel="icon" type="image/svg+xml" href="favicon/favicon.svg">
+  <link rel="icon" type="image/png" sizes="96x96" href="favicon/favicon-96x96.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon/apple-touch-icon.png">
+  <link rel="manifest" href="favicon/site.webmanifest">
+  <meta name="theme-color" content="#6366f1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -16,7 +22,7 @@
     <canvas id="bg-canvas-login"></canvas>
     <div class="auth-card glass-panel">
       <div class="auth-logo">
-        <div class="logo-cube">&#9726;</div>
+        <img src="assets/logo.png" alt="Word Cube" class="logo-image">
         <h1>WORD CUBE</h1>
         <p>3D Puzzle Game</p>
       </div>
@@ -33,6 +39,7 @@
         </button>
         <button type="submit" id="login-btn" class="glass-btn primary-btn">Login</button>
         <button type="button" id="goto-register-btn" class="glass-btn secondary-btn">Create Account</button>
+        <a href="#" id="goto-forgot-btn" class="forgot-password-link">Forgot Password?</a>
       </form>
     </div>
   </div>
@@ -42,21 +49,13 @@
     <canvas id="bg-canvas-register"></canvas>
     <div class="auth-card glass-panel">
       <div class="auth-logo">
-        <div class="logo-cube">&#9726;</div>
+        <img src="assets/logo.png" alt="Word Cube" class="logo-image">
         <h1>WORD CUBE</h1>
         <p>Create Account</p>
       </div>
       <form class="auth-form" id="register-form" autocomplete="off">
-        <div class="input-group input-with-btn">
+        <div class="input-group">
           <input type="email" id="reg-email" class="glass-input" placeholder="Email" required maxlength="254">
-          <button type="button" id="verify-email-btn" class="glass-btn primary-btn verify-btn">Verify</button>
-        </div>
-        <div class="input-group hidden" id="verify-code-group">
-          <div class="input-with-btn">
-            <input type="text" id="reg-verify-code" class="glass-input" placeholder="Enter 6-digit code" maxlength="6" inputmode="numeric">
-            <button type="button" id="confirm-code-btn" class="glass-btn primary-btn verify-btn">Confirm</button>
-          </div>
-          <p class="verify-hint" id="verify-hint"></p>
         </div>
         <div class="input-group">
           <input type="password" id="reg-password" class="glass-input" placeholder="Password" required minlength="6" maxlength="128">
@@ -70,6 +69,44 @@
         <button type="submit" id="register-btn" class="glass-btn primary-btn">Complete</button>
         <button type="button" id="cancel-register-btn" class="glass-btn secondary-btn">Cancel</button>
       </form>
+    </div>
+  </div>
+
+  <!-- ==================== FORGOT PASSWORD PAGE ==================== -->
+  <div id="forgot-page" class="page">
+    <canvas id="bg-canvas-forgot"></canvas>
+    <div class="auth-card glass-panel">
+      <div class="auth-logo">
+        <img src="assets/logo.png" alt="Word Cube" class="logo-image">
+        <h1>WORD CUBE</h1>
+        <p>Reset Password</p>
+      </div>
+      <form class="auth-form" id="forgot-form" autocomplete="off">
+        <p class="forgot-description">Enter your email address and we'll send you a link to reset your password.</p>
+        <div class="input-group">
+          <input type="email" id="forgot-email" class="glass-input" placeholder="Email" required maxlength="254">
+        </div>
+        <button type="submit" id="forgot-submit-btn" class="glass-btn primary-btn">Send Email</button>
+        <button type="button" id="cancel-forgot-btn" class="glass-btn secondary-btn">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== EMAIL VERIFICATION PAGE ==================== -->
+  <div id="verify-page" class="page">
+    <canvas id="bg-canvas-verify"></canvas>
+    <div class="auth-card glass-panel">
+      <div class="auth-logo">
+        <img src="assets/logo.png" alt="Word Cube" class="logo-image">
+        <h1>Verify Your Email</h1>
+      </div>
+      <div class="auth-form" style="text-align:center;">
+        <p style="color:var(--text-light);font-size:14px;line-height:1.7;margin-bottom:16px;">A verification email has been sent to:</p>
+        <p id="verify-email-address" style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:20px;word-break:break-all;"></p>
+        <p style="color:var(--text-light);font-size:13px;line-height:1.6;margin-bottom:24px;">Please click the link in the email to verify your account. Once verified, you can log in.</p>
+        <button id="verify-email-resend-btn" class="glass-btn secondary-btn" style="margin-bottom:12px;">Resend Email</button>
+        <button id="verify-back-login-btn" class="glass-btn primary-btn">Back to Login</button>
+      </div>
     </div>
   </div>
 
@@ -87,6 +124,7 @@
         <button id="new-game-btn" class="glass-btn secondary-btn small-btn" title="New Game" style="display:none;">New Game</button>
       </div>
       <div class="header-center">
+        <img src="assets/logo.png" alt="" class="header-logo">
         <h1 class="header-title">WORD CUBE</h1>
       </div>
       <div class="header-right">
@@ -118,6 +156,10 @@
       <aside class="side-panel leaderboard-panel glass-panel">
         <h2>Leaderboard</h2>
         <p class="panel-subtitle" id="leaderboard-size">Cube: 3&times;3</p>
+        <div class="ranking-tabs">
+          <button class="ranking-tab active" id="ranking-tab-daily" data-mode="daily">Daily</button>
+          <button class="ranking-tab" id="ranking-tab-alltime" data-mode="alltime">All Time</button>
+        </div>
         <div id="leaderboard-list" class="leaderboard-list">
           <!-- Populated dynamically -->
         </div>
@@ -355,6 +397,10 @@
         <h2>Leaderboard</h2>
         <p class="panel-subtitle" id="mobile-leaderboard-size">Cube: 3&times;3</p>
         <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="ranking-tabs">
+        <button class="ranking-tab active" id="mobile-ranking-tab-daily" data-mode="daily">Daily</button>
+        <button class="ranking-tab" id="mobile-ranking-tab-alltime" data-mode="alltime">All Time</button>
       </div>
       <div id="mobile-leaderboard-list" class="leaderboard-list"></div>
     </div>

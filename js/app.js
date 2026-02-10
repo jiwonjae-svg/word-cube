@@ -1,6 +1,6 @@
 // app.js - Main entry point: routing, UI events, and page management
 
-import { initAuth, login, register, loginWithGoogle, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists } from './auth.js';
+import { initAuth, login, register, loginWithGoogle, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists, sendPasswordReset, sendVerificationEmail, isEmailVerified } from './auth.js';
 import { Game } from './game.js';
 import { GameTimer } from './timer.js';
 import { BackgroundCubes } from './cube.js';
@@ -9,14 +9,12 @@ import { BackgroundCubes } from './cube.js';
 let game = null;
 let bgCubes = null;
 let bgCubesRegister = null;
+let bgCubesForgot = null;
+let bgCubesVerify = null;
 let selectedCubeSize = null;
 let currentPage = 'login';
 let gamePageInitialized = false;
-
-// Email verification state
-let emailVerified = false;
-let verificationCode = null;
-let verifiedEmail = null;
+let leaderboardMode = 'daily'; // 'daily' or 'alltime'
 
 // ===== DOM References =====
 const $ = (id) => document.getElementById(id);
@@ -78,26 +76,14 @@ function processAvatarFile(file) {
 }
 
 function resetEmailVerification() {
-  emailVerified = false;
-  verificationCode = null;
-  verifiedEmail = null;
-  const el = $('reg-email');
-  if (el) el.readOnly = false;
-  const cg = $('verify-code-group');
-  if (cg) cg.classList.add('hidden');
-  const rc = $('reg-verify-code');
-  if (rc) { rc.value = ''; rc.readOnly = false; }
-  const vb = $('verify-email-btn');
-  if (vb) { vb.disabled = false; vb.textContent = 'Verify'; }
-  const cb = $('confirm-code-btn');
-  if (cb) cb.disabled = false;
-  const vh = $('verify-hint');
-  if (vh) { vh.textContent = ''; vh.style.color = ''; }
+  // No-op: email verification is now handled by Firebase
 }
 
 // Pages
 const loginPage = $('login-page');
 const registerPage = $('register-page');
+const forgotPage = $('forgot-page');
+const verifyPage = $('verify-page');
 const gamePage = $('game-page');
 
 // ===== Initialize =====
@@ -125,11 +111,28 @@ async function init() {
 // ===== Auth State Handler =====
 function handleAuthChange(user) {
   if (user) {
+    // If email not verified (and not a Google user), redirect to verify page
+    if (!isEmailVerified() && user.providerData?.[0]?.providerId !== 'google.com') {
+      $('verify-email-address').textContent = user.email || '';
+      showPage('verify');
+      return;
+    }
     showPage('game');
     updateProfileDisplay(user);
     if (!gamePageInitialized) {
       gamePageInitialized = true;
       initGamePage().catch(err => console.error('[App] initGamePage error:', err));
+
+      // Show welcome modal for first-time users (email-registered)
+      const welcomeShownKey = `wordcube_welcome_shown_${user.id}`;
+      if (!localStorage.getItem(welcomeShownKey)) {
+        localStorage.setItem(welcomeShownKey, '1');
+        setTimeout(() => {
+          const userName = user.name || 'Player';
+          $('welcome-user-name').textContent = `Welcome, ${userName}!`;
+          showModal('welcome-modal');
+        }, 600);
+      }
     }
   } else {
     gamePageInitialized = false;
@@ -145,6 +148,8 @@ function showPage(page) {
 
   loginPage.classList.remove('active');
   registerPage.classList.remove('active');
+  forgotPage.classList.remove('active');
+  verifyPage.classList.remove('active');
   gamePage.classList.remove('active');
 
   switch (page) {
@@ -155,6 +160,14 @@ function showPage(page) {
     case 'register':
       registerPage.classList.add('active');
       initRegisterBackground();
+      break;
+    case 'forgot':
+      forgotPage.classList.add('active');
+      initForgotBackground();
+      break;
+    case 'verify':
+      verifyPage.classList.add('active');
+      initVerifyBackground();
       break;
     case 'game':
       gamePage.classList.add('active');
@@ -180,9 +193,27 @@ function initRegisterBackground() {
   }
 }
 
+function initForgotBackground() {
+  if (bgCubesForgot) return;
+  const canvas = $('bg-canvas-forgot');
+  if (canvas) {
+    bgCubesForgot = new BackgroundCubes(canvas);
+  }
+}
+
+function initVerifyBackground() {
+  if (bgCubesVerify) return;
+  const canvas = $('bg-canvas-verify');
+  if (canvas) {
+    bgCubesVerify = new BackgroundCubes(canvas);
+  }
+}
+
 function destroyBackgrounds() {
   if (bgCubes) { bgCubes.destroy(); bgCubes = null; }
   if (bgCubesRegister) { bgCubesRegister.destroy(); bgCubesRegister = null; }
+  if (bgCubesForgot) { bgCubesForgot.destroy(); bgCubesForgot = null; }
+  if (bgCubesVerify) { bgCubesVerify.destroy(); bgCubesVerify = null; }
 }
 
 // ===== Auth Events =====
@@ -210,6 +241,7 @@ function setupAuthEvents() {
     if (!result.success) {
       showToast(result.error || 'Login failed', 'error');
     }
+    // Note: welcome modal for first-time email users is handled in handleAuthChange
   });
 
   // Google auth
@@ -217,12 +249,66 @@ function setupAuthEvents() {
     const result = await loginWithGoogle();
     if (!result.success) {
       showToast(result.error || 'Google sign-in failed', 'error');
+    } else if (result.isNewUser) {
+      // Show welcome modal for first-time Google users
+      // Mark as shown so handleAuthChange doesn't show it again
+      setTimeout(() => {
+        const user = getCurrentUser();
+        if (user) {
+          localStorage.setItem(`wordcube_welcome_shown_${user.id}`, '1');
+        }
+        const userName = user ? user.name : 'Player';
+        $('welcome-user-name').textContent = `Welcome, ${userName}!`;
+        showModal('welcome-modal');
+      }, 500);
     }
   });
 
   // Go to register
   $('goto-register-btn').addEventListener('click', () => {
     showPage('register');
+  });
+
+  // Go to forgot password
+  $('goto-forgot-btn').addEventListener('click', (e) => {
+    e.preventDefault();
+    showPage('forgot');
+  });
+
+  // Forgot password form
+  $('forgot-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('forgot-email').value.trim();
+    if (!email) {
+      showToast('Please enter your email', 'error');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      showToast('Invalid email format', 'error');
+      return;
+    }
+
+    const btn = $('forgot-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    const result = await sendPasswordReset(email);
+
+    btn.disabled = false;
+    btn.textContent = 'Send Email';
+
+    if (result.success) {
+      showToast('Password reset email sent! Check your inbox.', 'success');
+      $('forgot-email').value = '';
+    } else {
+      showToast(result.error || 'Failed to send reset email', 'error');
+    }
+  });
+
+  // Cancel forgot password
+  $('cancel-forgot-btn').addEventListener('click', () => {
+    $('forgot-email').value = '';
+    showPage('login');
   });
 
   // Register form
@@ -235,11 +321,6 @@ function setupAuthEvents() {
 
     if (!email || !password || !confirm || !name) {
       showToast('Please fill in all fields', 'error');
-      return;
-    }
-
-    if (!emailVerified || verifiedEmail !== email) {
-      showToast('Please verify your email first', 'error');
       return;
     }
 
@@ -275,72 +356,12 @@ function setupAuthEvents() {
     if (!result.success) {
       showToast(result.error || 'Registration failed', 'error');
     } else {
-      // Show welcome modal
-      $('welcome-user-name').textContent = `Welcome, ${name}!`;
-      showModal('welcome-modal');
-      resetEmailVerification();
-    }
-  });
-
-  // Email verification
-  $('verify-email-btn').addEventListener('click', async () => {
-    const email = $('reg-email').value.trim();
-    if (!email) {
-      showToast('Please enter your email', 'error');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      showToast('Invalid email format', 'error');
-      return;
-    }
-
-    const btn = $('verify-email-btn');
-    btn.disabled = true;
-    btn.textContent = 'Checking...';
-
-    try {
-      const exists = await checkEmailExists(email);
-      if (exists) {
-        showToast('This email is already registered', 'error');
-        btn.disabled = false;
-        btn.textContent = 'Verify';
-        return;
+      // Send verification email - handleAuthChange will redirect to verify page
+      // since the user's email is not yet verified
+      const verifyResult = await sendVerificationEmail();
+      if (!verifyResult.success) {
+        showToast('Could not send verification email. You can resend it later.', 'info');
       }
-
-      // Generate 6-digit code
-      verificationCode = String(Math.floor(100000 + Math.random() * 900000));
-      verifiedEmail = null;
-      emailVerified = false;
-
-      // Show code (in production, send via Cloud Functions)
-      showToast(`Verification code: ${verificationCode}`, 'info');
-      console.log(`[Auth] Verification code for ${email}: ${verificationCode}`);
-
-      $('verify-code-group').classList.remove('hidden');
-      $('verify-hint').textContent = `A 6-digit code has been sent to ${email}`;
-      $('verify-hint').style.color = '';
-      $('reg-email').readOnly = true;
-      btn.textContent = 'Resend';
-      btn.disabled = false;
-    } catch (err) {
-      showToast('Failed to verify email', 'error');
-      btn.disabled = false;
-      btn.textContent = 'Verify';
-    }
-  });
-
-  $('confirm-code-btn').addEventListener('click', () => {
-    const code = $('reg-verify-code').value.trim();
-    if (code === verificationCode) {
-      emailVerified = true;
-      verifiedEmail = $('reg-email').value.trim();
-      $('verify-hint').textContent = '\u2713 Email verified!';
-      $('verify-hint').style.color = 'var(--success)';
-      $('reg-verify-code').readOnly = true;
-      $('confirm-code-btn').disabled = true;
-      showToast('Email verified successfully!', 'success');
-    } else {
-      showToast('Invalid verification code', 'error');
     }
   });
 
@@ -426,12 +447,7 @@ function setupGameEvents() {
     $('mobile-words-modal').classList.remove('hidden');
   });
   $('mobile-ranking-btn').addEventListener('click', () => {
-    const src = $('leaderboard-list');
-    const dst = $('mobile-leaderboard-list');
-    dst.innerHTML = src.innerHTML;
-    if ($('mobile-leaderboard-size')) {
-      $('mobile-leaderboard-size').innerHTML = $('leaderboard-size').innerHTML;
-    }
+    syncMobileLeaderboard();
     $('mobile-ranking-modal').classList.remove('hidden');
   });
 
@@ -446,6 +462,31 @@ function setupGameEvents() {
       btn.closest('.mobile-panel-modal').classList.add('hidden');
     });
   });
+
+  // Ranking tab switching (desktop)
+  const setupRankingTabs = (dailyId, alltimeId, isMobile) => {
+    const dailyBtn = $(dailyId);
+    const alltimeBtn = $(alltimeId);
+    if (!dailyBtn || !alltimeBtn) return;
+
+    dailyBtn.addEventListener('click', () => {
+      leaderboardMode = 'daily';
+      dailyBtn.classList.add('active');
+      alltimeBtn.classList.remove('active');
+      updateLeaderboard(selectedCubeSize || 3);
+      if (isMobile) syncMobileLeaderboard();
+    });
+    alltimeBtn.addEventListener('click', () => {
+      leaderboardMode = 'alltime';
+      alltimeBtn.classList.add('active');
+      dailyBtn.classList.remove('active');
+      updateLeaderboard(selectedCubeSize || 3);
+      if (isMobile) syncMobileLeaderboard();
+    });
+  };
+
+  setupRankingTabs('ranking-tab-daily', 'ranking-tab-alltime', false);
+  setupRankingTabs('mobile-ranking-tab-daily', 'mobile-ranking-tab-alltime', true);
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
@@ -589,12 +630,13 @@ async function updateLeaderboard(cubeSize) {
   const list = $('leaderboard-list');
   list.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;">Loading...</div>';
 
-  const scores = await Game.getLeaderboard(cubeSize, 10);
+  const scores = await Game.getLeaderboard(cubeSize, 10, leaderboardMode);
 
   list.innerHTML = '';
 
   if (scores.length === 0) {
-    list.innerHTML = '<div style="padding:12px;color:#94a3b8;font-size:13px;">No scores yet. Be the first!</div>';
+    const msg = leaderboardMode === 'daily' ? 'No scores today. Be the first!' : 'No scores yet. Be the first!';
+    list.innerHTML = `<div style="padding:12px;color:#94a3b8;font-size:13px;">${msg}</div>`;
     return;
   }
 
@@ -611,6 +653,22 @@ async function updateLeaderboard(cubeSize) {
     `;
     list.appendChild(item);
   });
+}
+
+function syncMobileLeaderboard() {
+  const src = $('leaderboard-list');
+  const dst = $('mobile-leaderboard-list');
+  dst.innerHTML = src.innerHTML;
+  if ($('mobile-leaderboard-size')) {
+    $('mobile-leaderboard-size').innerHTML = $('leaderboard-size').innerHTML;
+  }
+  // Sync tab active state
+  const mobileDailyTab = $('mobile-ranking-tab-daily');
+  const mobileAlltimeTab = $('mobile-ranking-tab-alltime');
+  if (mobileDailyTab && mobileAlltimeTab) {
+    mobileDailyTab.classList.toggle('active', leaderboardMode === 'daily');
+    mobileAlltimeTab.classList.toggle('active', leaderboardMode === 'alltime');
+  }
 }
 
 // ===== Profile =====
@@ -815,6 +873,33 @@ function setupModalEvents() {
   // Welcome modal start button
   $('welcome-start-btn').addEventListener('click', () => {
     closeAllModals();
+  });
+
+  // Verify email modal - "I've Verified My Email" button
+  // (removed: now handled by verify page's Back to Login button)
+
+  // Verify email page - "Resend Email" button
+  $('verify-email-resend-btn').addEventListener('click', async () => {
+    const btn = $('verify-email-resend-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    const result = await sendVerificationEmail();
+
+    btn.disabled = false;
+    btn.textContent = 'Resend Email';
+
+    if (result.success) {
+      showToast('Verification email resent! Check your inbox.', 'success');
+    } else {
+      showToast(result.error || 'Failed to resend email', 'error');
+    }
+  });
+
+  // Verify email page - "Back to Login" button
+  $('verify-back-login-btn').addEventListener('click', async () => {
+    await logout();
+    showPage('login');
   });
 
   // Escape key
