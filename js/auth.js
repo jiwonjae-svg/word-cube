@@ -337,9 +337,10 @@ export async function sendVerificationEmail() {
       const { sendEmailVerification } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
       const user = getFirebaseAuth().currentUser;
       if (user) {
+        // Use ActionCodeSettings to redirect back to app after verification
         const actionCodeSettings = {
-          url: window.location.origin + '/?emailVerified=1',
-          handleCodeInApp: false
+          url: window.location.origin,
+          handleCodeInApp: true
         };
         await sendEmailVerification(user, actionCodeSettings);
         return { success: true };
@@ -448,20 +449,21 @@ export async function detectCountryFromIP() {
   }
 
   try {
-    const res = await fetch('https://api.country.is/', { signal: AbortSignal.timeout(5000) });
-    const data = await res.json();
-    const code = data.country || 'US';
-    localStorage.setItem('wordcube_detected_country', JSON.stringify({ code, ts: Date.now() }));
-    return code;
+    // Primary API (supports CORS)
+    const res = await fetch('https://ipapi.co/country/', { signal: AbortSignal.timeout(5000) });
+    const code = (await res.text()).trim();
+    if (code.length === 2) {
+      localStorage.setItem('wordcube_detected_country', JSON.stringify({ code, ts: Date.now() }));
+      return code;
+    }
   } catch {
     try {
       // Fallback API
-      const res = await fetch('https://ipapi.co/country/', { signal: AbortSignal.timeout(5000) });
-      const code = (await res.text()).trim();
-      if (code.length === 2) {
-        localStorage.setItem('wordcube_detected_country', JSON.stringify({ code, ts: Date.now() }));
-        return code;
-      }
+      const res = await fetch('https://api.country.is/', { signal: AbortSignal.timeout(5000) });
+      const data = await res.json();
+      const code = data.country || 'US';
+      localStorage.setItem('wordcube_detected_country', JSON.stringify({ code, ts: Date.now() }));
+      return code;
     } catch {}
   }
   return 'US';

@@ -150,12 +150,6 @@ async function handleEmailVerificationFromURL() {
     }
     return;
   }
-
-  // Handle continueUrl redirect after Firebase action handler
-  if (params.get('emailVerified') === '1') {
-    window.history.replaceState({}, '', window.location.pathname);
-    showToast('Email verified! Please log in.', 'success');
-  }
 }
 
 // ===== Email Verification Polling =====
