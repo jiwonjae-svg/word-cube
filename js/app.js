@@ -1,6 +1,6 @@
 // app.js - Main entry point: routing, UI events, and page management
 
-import { initAuth, login, register, loginWithGoogle, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists, sendPasswordReset, sendVerificationEmail, isEmailVerified } from './auth.js';
+import { initAuth, login, register, loginWithGoogle, handleGoogleRedirect, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists, sendPasswordReset, sendVerificationEmail, isEmailVerified, reloadCurrentUser, applyEmailVerificationCode, isAdmin, logActivity, startPresence, stopPresence, getOnlineUsers, postAnnouncement, getLatestAnnouncement, getActivityLogs } from './auth.js';
 import { Game } from './game.js';
 import { GameTimer } from './timer.js';
 import { BackgroundCubes } from './cube.js';
@@ -91,6 +91,27 @@ async function init() {
   // Init auth (and storage)
   await initAuth();
 
+  // Handle email verification from URL params
+  await handleEmailVerificationFromURL();
+
+  // Handle Google OAuth redirect result
+  const redirectResult = await handleGoogleRedirect();
+  if (redirectResult && redirectResult.success) {
+    if (redirectResult.isNewUser) {
+      setTimeout(() => {
+        const user = getCurrentUser();
+        if (user) {
+          localStorage.setItem(`wordcube_welcome_shown_${user.id}`, '1');
+        }
+        const userName = user ? user.name : 'Player';
+        $('welcome-user-name').textContent = `Welcome, ${userName}!`;
+        showModal('welcome-modal');
+      }, 500);
+    }
+  } else if (redirectResult && redirectResult.error) {
+    showToast(redirectResult.error, 'error');
+  }
+
   // Listen for auth state changes
   onAuthChange(handleAuthChange);
 
@@ -100,12 +121,40 @@ async function init() {
   setupModalEvents();
   setupSettingsEvents();
   setupProfileEvents();
+  setupAdminEvents();
+  setupPrivacyEvents();
 
   // Generate size selector options
   generateSizeOptions();
 
   // Load settings into UI
   loadSettingsUI();
+}
+
+// Handle email verification from URL parameters
+async function handleEmailVerificationFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode');
+  const oobCode = params.get('oobCode');
+
+  // Handle Firebase action URL redirect
+  if (mode === 'verifyEmail' && oobCode) {
+    const result = await applyEmailVerificationCode(oobCode);
+    // Clean URL
+    window.history.replaceState({}, '', window.location.pathname);
+    if (result.success) {
+      showToast('Email verified successfully! Please log in.', 'success');
+    } else {
+      showToast(result.error || 'Verification failed. Please try again.', 'error');
+    }
+    return;
+  }
+
+  // Handle continueUrl redirect after Firebase action handler
+  if (params.get('emailVerified') === '1') {
+    window.history.replaceState({}, '', window.location.pathname);
+    showToast('Email verified! Please log in.', 'success');
+  }
 }
 
 // ===== Auth State Handler =====
@@ -119,6 +168,26 @@ function handleAuthChange(user) {
     }
     showPage('game');
     updateProfileDisplay(user);
+
+    // Toggle admin UI
+    const adminBtn = $('admin-btn');
+    if (adminBtn) {
+      if (isAdmin(user)) {
+        adminBtn.classList.remove('hidden');
+      } else {
+        adminBtn.classList.add('hidden');
+      }
+    }
+
+    // Start presence tracking
+    startPresence();
+
+    // Log login
+    logActivity('login', { email: user.email });
+
+    // Check for announcements
+    loadAnnouncement();
+
     if (!gamePageInitialized) {
       gamePageInitialized = true;
       initGamePage().catch(err => console.error('[App] initGamePage error:', err));
@@ -137,6 +206,7 @@ function handleAuthChange(user) {
   } else {
     gamePageInitialized = false;
     if (game) { game.destroy(); game = null; }
+    stopPresence();
     showPage('login');
     initLoginBackground();
   }
@@ -246,7 +316,20 @@ function setupAuthEvents() {
 
   // Google auth
   $('google-auth-btn').addEventListener('click', async () => {
+    const btn = $('google-auth-btn');
+    btn.disabled = true;
+    btn.textContent = 'Connecting...';
+
     const result = await loginWithGoogle();
+
+    btn.disabled = false;
+    btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Continue with Google`;
+
+    if (result.redirect) {
+      // Redirect in progress, page will reload
+      return;
+    }
+
     if (!result.success) {
       showToast(result.error || 'Google sign-in failed', 'error');
     } else if (result.isNewUser) {
@@ -318,9 +401,15 @@ function setupAuthEvents() {
     const password = $('reg-password').value;
     const confirm = $('reg-password-confirm').value;
     const name = $('reg-name').value.trim();
+    const privacyAgreed = $('reg-privacy-agree').checked;
 
     if (!email || !password || !confirm || !name) {
       showToast('Please fill in all fields', 'error');
+      return;
+    }
+
+    if (!privacyAgreed) {
+      showToast('개인정보 처리방침에 동의해주세요.', 'error');
       return;
     }
 
@@ -736,7 +825,6 @@ function setupProfileEvents() {
   // Save profile
   $('save-profile-btn').addEventListener('click', async () => {
     const name = $('edit-name').value.trim();
-    const country = $('edit-country').value;
     const avatar = $('avatar-preview').dataset?.imageData || null;
 
     if (!name) {
@@ -744,13 +832,14 @@ function setupProfileEvents() {
       return;
     }
 
-    const updates = { name, country };
+    const updates = { name };
     if (avatar) updates.avatar = avatar;
 
     const result = await updateProfile(updates);
     if (result.success) {
       showToast('Profile updated!', 'success');
       updateProfileDisplay(result.user);
+      logActivity('profile_update', { name });
       closeAllModals();
     } else {
       showToast('Failed to update profile', 'error');
@@ -763,7 +852,13 @@ function openProfileEditModal() {
   if (!user) return;
 
   $('edit-name').value = user.name || '';
-  $('edit-country').value = user.country || 'US';
+
+  // Show country as read-only (auto-detected from IP)
+  const countryDisplay = $('edit-country-display');
+  if (countryDisplay) {
+    const code = user.country || 'US';
+    countryDisplay.innerHTML = `${countryFlag(code)} ${sanitize(code)}`;
+  }
 
   const preview = $('avatar-preview');
   if (user.avatar) {
@@ -878,6 +973,29 @@ function setupModalEvents() {
   // Verify email modal - "I've Verified My Email" button
   // (removed: now handled by verify page's Back to Login button)
 
+  // Verify email page - "I've Verified My Email" button
+  $('verify-check-btn').addEventListener('click', async () => {
+    const btn = $('verify-check-btn');
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+
+    const verified = await reloadCurrentUser();
+
+    btn.disabled = false;
+    btn.textContent = "I've Verified My Email";
+
+    if (verified) {
+      showToast('Email verified! Logging in...', 'success');
+      // Re-trigger auth change to proceed to game page
+      const user = getCurrentUser();
+      if (user) {
+        handleAuthChange(user);
+      }
+    } else {
+      showToast('Email not yet verified. Please check your inbox and click the verification link.', 'error');
+    }
+  });
+
   // Verify email page - "Resend Email" button
   $('verify-email-resend-btn').addEventListener('click', async () => {
     const btn = $('verify-email-resend-btn');
@@ -917,6 +1035,177 @@ function closeAllModals() {
   $$('.modal').forEach(m => m.classList.add('hidden'));
   $$('.mobile-panel-modal').forEach(m => m.classList.add('hidden'));
   $('profile-menu').classList.add('hidden');
+}
+
+// ===== Admin Events =====
+function setupAdminEvents() {
+  // Admin panel button
+  const adminBtn = $('admin-btn');
+  if (adminBtn) {
+    adminBtn.addEventListener('click', () => {
+      showModal('admin-modal');
+    });
+  }
+
+  // Force clear puzzle
+  $('admin-force-clear-btn').addEventListener('click', () => {
+    closeAllModals();
+    if (game && game.state === 'playing') {
+      game.forceComplete();
+      logActivity('admin_force_clear', { cubeSize: game.cubeSize });
+      showToast('Puzzle force-cleared (admin)', 'info');
+    } else {
+      showToast('No active game to clear', 'error');
+    }
+  });
+
+  // View logs
+  $('admin-logs-btn').addEventListener('click', async () => {
+    closeAllModals();
+    showModal('admin-logs-modal');
+    const listEl = $('admin-logs-list');
+    listEl.innerHTML = '<p style="color:var(--text-light);font-size:13px;">Loading...</p>';
+
+    const logs = await getActivityLogs(100);
+    listEl.innerHTML = '';
+
+    if (logs.length === 0) {
+      listEl.innerHTML = '<p style="color:var(--text-light);font-size:13px;">No logs found.</p>';
+      return;
+    }
+
+    for (const log of logs) {
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      const date = new Date(log.timestamp || log.date).toLocaleString();
+      let details = '';
+      try { details = log.details ? JSON.parse(log.details) : {}; } catch { details = log.details; }
+      const detailStr = typeof details === 'object' ? Object.entries(details).map(([k, v]) => `${k}: ${v}`).join(', ') : String(details);
+      item.innerHTML = `
+        <span class="log-time">${sanitize(date)}</span>
+        <span class="log-action">${sanitize(log.action)}</span>
+        <span class="log-user">${sanitize(log.userName)}</span>
+        <span class="log-details">${sanitize(detailStr)}</span>
+      `;
+      listEl.appendChild(item);
+    }
+  });
+
+  // Online users
+  $('admin-online-btn').addEventListener('click', async () => {
+    closeAllModals();
+    showModal('admin-online-modal');
+    const listEl = $('admin-online-list');
+    const countEl = $('admin-online-count');
+    listEl.innerHTML = '<p style="color:var(--text-light);font-size:13px;">Loading...</p>';
+
+    const users = await getOnlineUsers();
+    countEl.textContent = `${users.length} user${users.length !== 1 ? 's' : ''} online`;
+    listEl.innerHTML = '';
+
+    if (users.length === 0) {
+      listEl.innerHTML = '<p style="color:var(--text-light);font-size:13px;">No users online.</p>';
+      return;
+    }
+
+    for (const u of users) {
+      const item = document.createElement('div');
+      item.className = 'online-user-item';
+      const ago = Math.round((Date.now() - u.lastActive) / 1000);
+      const agoStr = ago < 60 ? `${ago}s ago` : `${Math.round(ago / 60)}m ago`;
+      item.innerHTML = `
+        <span class="online-dot"></span>
+        <span>${sanitize(u.userName)}</span>
+        <span style="color:var(--text-light);font-size:12px;margin-left:auto;">${agoStr}</span>
+      `;
+      listEl.appendChild(item);
+    }
+  });
+
+  // Post announcement
+  $('admin-announce-btn').addEventListener('click', () => {
+    closeAllModals();
+    $('announce-title').value = '';
+    $('announce-content').value = '';
+    showModal('admin-announce-modal');
+  });
+
+  $('announce-submit-btn').addEventListener('click', async () => {
+    const title = $('announce-title').value.trim();
+    const content = $('announce-content').value.trim();
+
+    if (!title || !content) {
+      showToast('Please fill in title and content', 'error');
+      return;
+    }
+
+    const btn = $('announce-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Posting...';
+
+    const result = await postAnnouncement(title, content);
+
+    btn.disabled = false;
+    btn.textContent = 'Post Announcement';
+
+    if (result.success) {
+      showToast('Announcement posted!', 'success');
+      logActivity('admin_announcement', { title });
+      closeAllModals();
+      loadAnnouncement();
+    } else {
+      showToast(result.error || 'Failed to post', 'error');
+    }
+  });
+}
+
+// ===== Privacy Policy Events =====
+function setupPrivacyEvents() {
+  // Register page privacy link
+  const privacyLink = $('privacy-policy-link');
+  if (privacyLink) {
+    privacyLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      showModal('privacy-modal');
+    });
+  }
+
+  // Footer privacy link
+  const footerPrivacy = $('footer-privacy-link');
+  if (footerPrivacy) {
+    footerPrivacy.addEventListener('click', (e) => {
+      e.preventDefault();
+      showModal('privacy-modal');
+    });
+  }
+}
+
+// ===== Announcement Banner =====
+async function loadAnnouncement() {
+  const ann = await getLatestAnnouncement();
+  const banner = $('announcement-banner');
+  if (!banner) return;
+
+  if (ann) {
+    // Check if user already dismissed this announcement
+    const dismissedKey = `wordcube_dismissed_ann_${ann.id}`;
+    if (localStorage.getItem(dismissedKey)) {
+      banner.classList.add('hidden');
+      return;
+    }
+
+    $('announcement-title').textContent = ann.title || '';
+    $('announcement-content').textContent = ` — ${ann.content || ''}`;
+    banner.classList.remove('hidden');
+
+    // Close button
+    $('announcement-close-btn').onclick = () => {
+      banner.classList.add('hidden');
+      localStorage.setItem(dismissedKey, '1');
+    };
+  } else {
+    banner.classList.add('hidden');
+  }
 }
 
 // ===== Toast Notifications =====

@@ -2,8 +2,12 @@
 
 import {
   initStorage, getIsOnline, getFirebaseAuth,
-  setDoc, getDoc, generateId
+  setDoc, getDoc, generateId, queryCollection
 } from './firebase-config.js';
+
+// ===== Admin Configuration =====
+// Add admin email addresses here
+const ADMIN_EMAILS = ['admin@wordcube.com'];
 
 const USER_SESSION_KEY = 'wordcube_user_session';
 
@@ -84,11 +88,12 @@ export async function initAuth() {
           // Load or create user profile
           let profile = await getDoc('users', user.uid);
           if (!profile) {
+            const country = await detectCountryFromIP();
             profile = {
               id: user.uid,
               email: user.email,
               name: user.displayName || 'Player',
-              country: 'US',
+              country,
               code: generateUserCode(),
               avatar: user.photoURL || null,
               createdAt: Date.now()
@@ -118,6 +123,8 @@ export async function register(email, password, displayName) {
     return { success: false, error: 'Too many registration attempts. Please wait a minute.' };
   }
 
+  const detectedCountry = await detectCountryFromIP();
+
   if (getIsOnline() && getFirebaseAuth()) {
     try {
       const { createUserWithEmailAndPassword, updateProfile } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
@@ -128,7 +135,7 @@ export async function register(email, password, displayName) {
         id: cred.user.uid,
         email,
         name: displayName,
-        country: 'US',
+        country: detectedCountry,
         code: generateUserCode(),
         avatar: null,
         createdAt: Date.now()
@@ -155,7 +162,7 @@ export async function register(email, password, displayName) {
     id: uid,
     email,
     name: displayName,
-    country: 'US',
+    country: detectedCountry,
     code: generateUserCode(),
     avatar: null,
     password: hashedPw,
@@ -185,11 +192,12 @@ export async function login(email, password) {
       const cred = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
       let profile = await getDoc('users', cred.user.uid);
       if (!profile) {
+        const country = await detectCountryFromIP();
         profile = {
           id: cred.user.uid,
           email: cred.user.email,
           name: cred.user.displayName || 'Player',
-          country: 'US',
+          country,
           code: generateUserCode(),
           avatar: cred.user.photoURL || null,
           createdAt: Date.now()
@@ -231,18 +239,49 @@ export async function login(email, password) {
 export async function loginWithGoogle() {
   if (getIsOnline() && getFirebaseAuth()) {
     try {
-      const { GoogleAuthProvider, signInWithPopup, getAdditionalUserInfo } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      const { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getAdditionalUserInfo } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(getFirebaseAuth(), provider);
-      const additionalInfo = getAdditionalUserInfo(result);
-      const isNewUser = additionalInfo ? additionalInfo.isNewUser : false;
-      return { success: true, isNewUser };
+      try {
+        const result = await signInWithPopup(getFirebaseAuth(), provider);
+        const additionalInfo = getAdditionalUserInfo(result);
+        const isNewUser = additionalInfo ? additionalInfo.isNewUser : false;
+        return { success: true, isNewUser };
+      } catch (popupErr) {
+        // If popup failed (blocked, closed, or COOP issues), fall back to redirect
+        const popupCodes = ['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/internal-error'];
+        const errCode = popupErr.code || '';
+        if (popupCodes.includes(errCode) || popupErr.message?.includes('Cross-Origin')) {
+          console.log('[Auth] Popup failed, falling back to redirect');
+          await signInWithRedirect(getFirebaseAuth(), provider);
+          return { success: true, redirect: true };
+        }
+        throw popupErr;
+      }
     } catch (err) {
-      return { success: false, error: friendlyError(err.message) };
+      return { success: false, error: friendlyError(err.message || err.code || 'Google sign-in failed') };
     }
   }
 
   return { success: false, error: 'Google sign-in requires Firebase configuration' };
+}
+
+// Handle Google OAuth redirect result (called on page load)
+export async function handleGoogleRedirect() {
+  if (getIsOnline() && getFirebaseAuth()) {
+    try {
+      const { getRedirectResult, getAdditionalUserInfo } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      const result = await getRedirectResult(getFirebaseAuth());
+      if (result && result.user) {
+        const additionalInfo = getAdditionalUserInfo(result);
+        const isNewUser = additionalInfo ? additionalInfo.isNewUser : false;
+        return { success: true, isNewUser };
+      }
+    } catch (err) {
+      console.warn('[Auth] Redirect result error:', err);
+      return { success: false, error: friendlyError(err.message) };
+    }
+  }
+  return { success: false };
 }
 
 // Logout
@@ -298,7 +337,11 @@ export async function sendVerificationEmail() {
       const { sendEmailVerification } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
       const user = getFirebaseAuth().currentUser;
       if (user) {
-        await sendEmailVerification(user);
+        const actionCodeSettings = {
+          url: window.location.origin + '/?emailVerified=1',
+          handleCodeInApp: false
+        };
+        await sendEmailVerification(user, actionCodeSettings);
         return { success: true };
       }
       return { success: false, error: 'No authenticated user' };
@@ -307,6 +350,20 @@ export async function sendVerificationEmail() {
     }
   }
   return { success: false, error: 'Email verification requires Firebase configuration (online mode)' };
+}
+
+// Apply email verification action code from URL
+export async function applyEmailVerificationCode(oobCode) {
+  if (getIsOnline() && getFirebaseAuth()) {
+    try {
+      const { applyActionCode } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      await applyActionCode(getFirebaseAuth(), oobCode);
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: friendlyError(err.message) };
+    }
+  }
+  return { success: false, error: 'Requires online mode' };
 }
 
 // Check if current user's email is verified
@@ -376,4 +433,140 @@ function loadSession() {
 
 function clearSession() {
   try { localStorage.removeItem(USER_SESSION_KEY); } catch {}
+}
+
+// ===== IP-based Country Detection =====
+export async function detectCountryFromIP() {
+  // Check cache first
+  const cached = localStorage.getItem('wordcube_detected_country');
+  if (cached) {
+    try {
+      const { code, ts } = JSON.parse(cached);
+      // Cache for 24h
+      if (Date.now() - ts < 86400000 && code) return code;
+    } catch {}
+  }
+
+  try {
+    const res = await fetch('https://api.country.is/', { signal: AbortSignal.timeout(5000) });
+    const data = await res.json();
+    const code = data.country || 'US';
+    localStorage.setItem('wordcube_detected_country', JSON.stringify({ code, ts: Date.now() }));
+    return code;
+  } catch {
+    try {
+      // Fallback API
+      const res = await fetch('https://ipapi.co/country/', { signal: AbortSignal.timeout(5000) });
+      const code = (await res.text()).trim();
+      if (code.length === 2) {
+        localStorage.setItem('wordcube_detected_country', JSON.stringify({ code, ts: Date.now() }));
+        return code;
+      }
+    } catch {}
+  }
+  return 'US';
+}
+
+// ===== Admin Check =====
+export function isAdmin(user) {
+  if (!user) return false;
+  return ADMIN_EMAILS.includes(user.email);
+}
+
+// ===== Activity Logging =====
+export async function logActivity(action, details = {}) {
+  const user = getCurrentUser();
+  const logEntry = {
+    action,
+    userId: user?.id || 'anonymous',
+    userName: user?.name || 'Anonymous',
+    details: JSON.stringify(details).substring(0, 500),
+    timestamp: Date.now(),
+    date: new Date().toISOString()
+  };
+  try {
+    await setDoc('logs', generateId(), logEntry);
+  } catch (err) {
+    console.warn('[Auth] Log write failed', err);
+  }
+}
+
+// ===== Presence System =====
+let presenceInterval = null;
+
+export async function startPresence() {
+  const user = getCurrentUser();
+  if (!user) return;
+
+  const updatePresence = async () => {
+    const u = getCurrentUser();
+    if (!u) return;
+    await setDoc('presence', u.id, {
+      userId: u.id,
+      userName: u.name || 'Player',
+      lastActive: Date.now(),
+      status: 'online'
+    });
+  };
+
+  await updatePresence();
+  if (presenceInterval) clearInterval(presenceInterval);
+  presenceInterval = setInterval(updatePresence, 30000); // every 30s
+}
+
+export async function stopPresence() {
+  if (presenceInterval) {
+    clearInterval(presenceInterval);
+    presenceInterval = null;
+  }
+  const user = getCurrentUser();
+  if (user) {
+    await setDoc('presence', user.id, {
+      userId: user.id,
+      userName: user.name || 'Player',
+      lastActive: Date.now(),
+      status: 'offline'
+    });
+  }
+}
+
+export async function getOnlineUsers() {
+  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+  const allPresence = await queryCollection('presence', {
+    where: [{ field: 'lastActive', op: '>=', value: fiveMinAgo }],
+    orderBy: { field: 'lastActive', direction: 'desc' }
+  });
+  return allPresence;
+}
+
+// ===== Announcements =====
+export async function postAnnouncement(title, content) {
+  const user = getCurrentUser();
+  if (!user || !isAdmin(user)) return { success: false, error: 'Not authorized' };
+
+  await setDoc('announcements', generateId(), {
+    title,
+    content,
+    author: user.name || 'Admin',
+    date: new Date().toISOString(),
+    timestamp: Date.now(),
+    active: true
+  });
+  return { success: true };
+}
+
+export async function getLatestAnnouncement() {
+  const announcements = await queryCollection('announcements', {
+    where: [{ field: 'active', op: '==', value: true }],
+    orderBy: { field: 'timestamp', direction: 'desc' },
+    limit: 1
+  });
+  return announcements.length > 0 ? announcements[0] : null;
+}
+
+export async function getActivityLogs(limit = 50) {
+  return queryCollection('logs', {
+    orderBy: { field: 'timestamp', direction: 'desc' },
+    limit
+  });
 }

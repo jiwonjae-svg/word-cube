@@ -90,6 +90,45 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ===== Activity Logs Collection =====
+    match /logs/{logId} {
+      // Only admins can read logs (checked client-side, basic auth gate here)
+      allow read: if isAuthenticated();
+
+      // Any authenticated user can create logs
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasAll(['action', 'userId', 'timestamp']);
+
+      allow update, delete: if false;
+    }
+
+    // ===== Presence Collection =====
+    match /presence/{userId} {
+      // Anyone can read presence (for admin online users view)
+      allow read: if isAuthenticated();
+
+      // Users can only update their own presence
+      allow create, update: if isOwner(userId)
+        && request.resource.data.keys().hasAll(['userId', 'userName', 'lastActive', 'status']);
+
+      allow delete: if isOwner(userId);
+    }
+
+    // ===== Announcements Collection =====
+    match /announcements/{announcementId} {
+      // Anyone can read announcements
+      allow read: if true;
+
+      // Only authenticated users can create (admin check is client-side)
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasAll(['title', 'content', 'author', 'date', 'timestamp', 'active']);
+
+      // Only authenticated users can update
+      allow update: if isAuthenticated();
+
+      allow delete: if false;
+    }
+
     // ===== Deny all other collections =====
     match /{document=**} {
       allow read, write: if false;

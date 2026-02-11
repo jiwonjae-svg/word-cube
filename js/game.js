@@ -270,6 +270,27 @@ export class Game {
     }
   }
 
+  // Force complete game (admin testing)
+  forceComplete() {
+    if (this.state !== 'playing') return;
+    this.state = 'complete';
+    const elapsed = this.timer.stop();
+
+    // Mark all words as found
+    for (const word of this.targetWords) {
+      this.foundWords.set(word, true);
+    }
+    this._renderWordList();
+
+    // Clear session
+    this._clearSession();
+
+    // Fire callback (score NOT saved for forced completions)
+    if (this.onGameComplete) {
+      this.onGameComplete(elapsed, false);
+    }
+  }
+
   // Render word list UI
   _renderWordList() {
     if (!this.wordListEl) return;
