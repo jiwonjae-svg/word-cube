@@ -158,6 +158,25 @@ export class WordCube {
     return this.faceGrids.map(face => face.map(row => [...row]));
   }
 
+  // Get orbit quaternion for session persistence
+  getOrbitQuaternion() {
+    return {
+      x: this.cubeGroup.quaternion.x,
+      y: this.cubeGroup.quaternion.y,
+      z: this.cubeGroup.quaternion.z,
+      w: this.cubeGroup.quaternion.w
+    };
+  }
+
+  // Set orbit quaternion from saved session
+  setOrbitQuaternion(q) {
+    if (q && typeof q.x === 'number') {
+      this.cubeGroup.quaternion.set(q.x, q.y, q.z, q.w);
+      this.orbitQuat.copy(this.cubeGroup.quaternion);
+      this.orbitTarget.copy(this.orbitQuat);
+    }
+  }
+
   // Create a high-resolution canvas texture for a tile letter
   _createTileTexture(letter, isHighlighted = false, glowColor = '#00ffd5') {
     const cacheKey = isHighlighted ? `${letter}_glow_${glowColor}` : letter;

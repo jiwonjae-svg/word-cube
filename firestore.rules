@@ -2,7 +2,7 @@ rules_version = '2';
 
 // =============================================================
 // Firestore Security Rules for Word Cube Puzzle
-// Deploy via: Firebase Console > Firestore > Rules
+// Deploy via: Firebase Console > Firestore > Rules (paste & publish)
 // Or via CLI: firebase deploy --only firestore:rules
 // =============================================================
 
@@ -22,10 +22,6 @@ service cloud.firestore {
       return field is string && field.size() <= maxLen;
     }
 
-    function isValidCountry(code) {
-      return code is string && code.size() == 2 && code.matches('^[A-Z]{2}$');
-    }
-
     // ===== Users Collection =====
     match /users/{userId} {
       // Anyone can read user profiles (for leaderboard display)
@@ -33,16 +29,12 @@ service cloud.firestore {
 
       // Users can only create/update their own profile
       allow create: if isOwner(userId)
-        && request.resource.data.keys().hasAll(['id', 'email', 'name', 'country', 'code', 'createdAt'])
-        && isValidString(request.resource.data.name, 30)
-        && isValidString(request.resource.data.email, 254)
-        && isValidString(request.resource.data.code, 8);
+        && request.resource.data.id is string
+        && request.resource.data.email is string
+        && isValidString(request.resource.data.name, 30);
 
       allow update: if isOwner(userId)
-        && isValidString(request.resource.data.name, 30)
-        // Prevent changing the id or email after creation
-        && request.resource.data.id == resource.data.id
-        && request.resource.data.email == resource.data.email;
+        && isValidString(request.resource.data.name, 30);
 
       // Users can only delete their own profile
       allow delete: if isOwner(userId);
@@ -56,7 +48,6 @@ service cloud.firestore {
       // Only authenticated users can create scores
       allow create: if isAuthenticated()
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'userName', 'cubeSize', 'time', 'date', 'valid'])
         && isValidString(request.resource.data.userName, 30)
         && request.resource.data.cubeSize is int
         && request.resource.data.cubeSize >= 2
@@ -79,7 +70,6 @@ service cloud.firestore {
       // Only authenticated users can create history entries
       allow create: if isAuthenticated()
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.keys().hasAll(['userId', 'cubeSize', 'time', 'date'])
         && request.resource.data.cubeSize is int
         && request.resource.data.cubeSize >= 2
         && request.resource.data.cubeSize <= 10
@@ -92,25 +82,23 @@ service cloud.firestore {
 
     // ===== Activity Logs Collection =====
     match /logs/{logId} {
-      // Only admins can read logs (checked client-side, basic auth gate here)
+      // Only authenticated users can read logs
       allow read: if isAuthenticated();
 
       // Any authenticated user can create logs
       allow create: if isAuthenticated()
-        && request.resource.data.keys().hasAll(['action', 'userId', 'timestamp']);
+        && request.resource.data.userId is string;
 
       allow update, delete: if false;
     }
 
     // ===== Presence Collection =====
     match /presence/{userId} {
-      // Anyone can read presence (for admin online users view)
+      // Anyone authenticated can read presence
       allow read: if isAuthenticated();
 
-      // Users can only update their own presence
-      allow create, update: if isOwner(userId)
-        && request.resource.data.keys().hasAll(['userId', 'userName', 'lastActive', 'status']);
-
+      // Users can only manage their own presence
+      allow create, update: if isOwner(userId);
       allow delete: if isOwner(userId);
     }
 
@@ -119,13 +107,8 @@ service cloud.firestore {
       // Anyone can read announcements
       allow read: if true;
 
-      // Only authenticated users can create (admin check is client-side)
-      allow create: if isAuthenticated()
-        && request.resource.data.keys().hasAll(['title', 'content', 'author', 'date', 'timestamp', 'active']);
-
-      // Only authenticated users can update
-      allow update: if isAuthenticated();
-
+      // Only authenticated users can create/update
+      allow create, update: if isAuthenticated();
       allow delete: if false;
     }
 

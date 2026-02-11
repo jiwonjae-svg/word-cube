@@ -49,14 +49,14 @@ export class GameTimer {
     }
   }
 
-  stop() {
+  stop(clearSession = true) {
     this.running = false;
     this.paused = false;
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
-    this._clearSession();
+    if (clearSession) this._clearSession();
     return this.displayTime;
   }
 
@@ -117,7 +117,7 @@ export class GameTimer {
   // Session persistence for crash recovery
   _saveSession() {
     try {
-      sessionStorage.setItem(this._sessionKey, JSON.stringify({
+      localStorage.setItem(this._sessionKey, JSON.stringify({
         startTime: this.startTime,
         serverOffset: this.serverOffset,
         running: this.running,
@@ -127,13 +127,13 @@ export class GameTimer {
   }
 
   _clearSession() {
-    try { sessionStorage.removeItem(this._sessionKey); } catch (e) {}
+    try { localStorage.removeItem(this._sessionKey); } catch (e) {}
   }
 
   // Try to restore from session
   static tryRestore() {
     try {
-      const data = sessionStorage.getItem('wordcube_timer_state');
+      const data = localStorage.getItem('wordcube_timer_state');
       if (!data) return null;
       const state = JSON.parse(data);
       // Only restore if saved within last 30 minutes

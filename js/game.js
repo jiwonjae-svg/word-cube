@@ -54,6 +54,9 @@ export class Game {
 
   // Start a new game with selected cube size
   async startGame(cubeSize) {
+    // Clear any previous session
+    this._clearSession();
+
     this.cubeSize = cubeSize;
     this.state = 'ready';
     this.seed = Date.now() % 2147483647;
@@ -334,27 +337,28 @@ export class Game {
         foundWords: Object.fromEntries(this.foundWords),
         faceGrids: this.cube ? this.cube.getFaceGrids() : null,
         moveHistory: this.cube ? this.cube.moveHistory : [],
+        orbitQuaternion: this.cube ? this.cube.getOrbitQuaternion() : null,
         startServerTime: this.startServerTime,
         timestamp: Date.now()
       };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+      localStorage.setItem(SESSION_KEY, JSON.stringify(data));
     } catch (e) {}
   }
 
   _clearSession() {
-    try { sessionStorage.removeItem(SESSION_KEY); } catch (e) {}
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
   }
 
   // Try to restore a previous game session
   async tryRestore() {
     try {
-      const raw = sessionStorage.getItem(SESSION_KEY);
+      const raw = localStorage.getItem(SESSION_KEY);
       if (!raw) return false;
 
       const data = JSON.parse(raw);
 
-      // Only restore if saved within last 30 minutes
-      if (Date.now() - data.timestamp > 30 * 60 * 1000) {
+      // Only restore if saved within last 24 hours
+      if (Date.now() - data.timestamp > 24 * 60 * 60 * 1000) {
         this._clearSession();
         return false;
       }
@@ -376,6 +380,10 @@ export class Game {
       if (data.moveHistory) {
         this.cube.moveHistory = data.moveHistory;
       }
+      // Restore viewing angle
+      if (data.orbitQuaternion) {
+        this.cube.setOrbitQuaternion(data.orbitQuaternion);
+      }
 
       this.cube.onRotationComplete = (grids) => {
         this._checkWords(grids);
@@ -385,13 +393,8 @@ export class Game {
       this._applySettings();
       this._renderWordList();
 
-      // Restore timer
-      const timerState = GameTimer.tryRestore();
-      if (timerState) {
-        this.timer.resume(timerState.startTime, timerState.serverOffset);
-      } else {
-        this.timer.start(this.startServerTime);
-      }
+      // Restore timer using saved start time (always resume, never restart)
+      this.timer.resume(this.startServerTime, 0);
 
       // Check current words
       this._checkWords(this.cube.getFaceGrids());
@@ -404,13 +407,13 @@ export class Game {
     }
   }
 
-  // Clean up
+  // Clean up (preserves session for later restore)
   destroy() {
     if (this.cube) {
       this.cube.destroy();
       this.cube = null;
     }
-    this.timer.stop();
+    this.timer.stop(false); // Don't clear timer session
   }
 
   // ===== Leaderboard =====
