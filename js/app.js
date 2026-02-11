@@ -1,6 +1,6 @@
 // app.js - Main entry point: routing, UI events, and page management
 
-import { initAuth, login, register, loginWithGoogle, handleGoogleRedirect, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists, sendPasswordReset, sendVerificationEmail, isEmailVerified, reloadCurrentUser, applyEmailVerificationCode, isAdmin, logActivity, startPresence, stopPresence, getOnlineUsers, postAnnouncement, getLatestAnnouncement, getActivityLogs } from './auth.js';
+import { initAuth, login, register, loginWithGoogle, handleGoogleRedirect, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists, sendPasswordReset, sendVerificationEmail, isEmailVerified, reloadCurrentUser, applyEmailVerificationCode, isAdmin, logActivity, startPresence, stopPresence, getOnlineUsers, postAnnouncement, getLatestAnnouncement, getActivityLogs, setRememberMe, getRememberMe } from './auth.js';
 import { Game } from './game.js';
 import { GameTimer } from './timer.js';
 import { BackgroundCubes } from './cube.js';
@@ -130,6 +130,12 @@ async function init() {
 
   // Load settings into UI
   loadSettingsUI();
+
+  // Restore remember-me checkbox state
+  const rememberMeCheckbox = $('login-remember-me');
+  if (rememberMeCheckbox) {
+    rememberMeCheckbox.checked = getRememberMe();
+  }
 }
 
 // Handle email verification from URL parameters
@@ -311,11 +317,14 @@ function setupAuthEvents() {
     e.preventDefault();
     const email = $('login-email').value.trim();
     const password = $('login-password').value;
+    const rememberMe = $('login-remember-me').checked;
 
     if (!email || !password) {
       showToast('Please fill in all fields', 'error');
       return;
     }
+
+    setRememberMe(rememberMe);
 
     const btn = $('login-btn');
     btn.disabled = true;
@@ -334,6 +343,9 @@ function setupAuthEvents() {
 
   // Google auth
   $('google-auth-btn').addEventListener('click', async () => {
+    const rememberMe = $('login-remember-me').checked;
+    setRememberMe(rememberMe);
+
     const btn = $('google-auth-btn');
     btn.disabled = true;
     btn.textContent = 'Connecting...';
@@ -512,6 +524,35 @@ function setupGameEvents() {
     $('mobile-new-game-btn').style.display = 'none';
     selectedCubeSize = null;
     updateSizeSelection();
+  });
+
+  // Resume game button (after session restore)
+  $('resume-btn').addEventListener('click', () => {
+    const overlay = $('resume-overlay');
+    const cubeSection = document.querySelector('.cube-section');
+
+    // Fade out the resume card immediately
+    overlay.classList.add('fading');
+
+    // Start unblurring the cube
+    if (cubeSection) {
+      cubeSection.classList.remove('blurred');
+      cubeSection.classList.add('unblurring');
+    }
+
+    // After the transition completes, resume the game
+    setTimeout(() => {
+      overlay.classList.add('hidden');
+      overlay.classList.remove('fading');
+      if (cubeSection) cubeSection.classList.remove('unblurring');
+
+      // Resume timer and enable cube interaction
+      if (game) {
+        game.timer.unpause();
+        if (game.cube) game.cube.setInteractionEnabled(true);
+      }
+      showToast('Game resumed!', 'success');
+    }, 1500);
   });
 
   // Undo / Redo buttons (desktop + mobile)
@@ -720,7 +761,13 @@ async function initGamePage() {
     $('mobile-new-game-btn').style.display = '';
     $('leaderboard-size').innerHTML = `Cube: ${selectedCubeSize}&times;${selectedCubeSize}`;
     updateLeaderboard(selectedCubeSize);
-    showToast('Previous game session restored', 'info');
+
+    // Pause the game and show resume overlay
+    game.timer.pause();
+    if (game.cube) game.cube.setInteractionEnabled(false);
+    const cubeSection = document.querySelector('.cube-section');
+    if (cubeSection) cubeSection.classList.add('blurred');
+    $('resume-overlay').classList.remove('hidden');
   } else {
     tempGame.destroy();
     // Show size selector

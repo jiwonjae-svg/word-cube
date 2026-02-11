@@ -112,6 +112,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ===== Config Collection =====
+    match /config/{configId} {
+      // Authenticated users can read config (e.g., admin email list)
+      allow read: if isAuthenticated();
+
+      // Config is managed via Firebase Console only
+      allow write: if false;
+    }
+
     // ===== Deny all other collections =====
     match /{document=**} {
       allow read, write: if false;

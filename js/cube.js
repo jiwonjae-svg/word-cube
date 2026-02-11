@@ -62,6 +62,7 @@ export class WordCube {
     this.sensitivity = 5;
     this.invertRotation = false;
     this.clickFeedback = true;
+    this.interactionEnabled = true;
 
     // Callbacks
     this.onRotationComplete = null;
@@ -903,8 +904,13 @@ export class WordCube {
     };
   }
 
+  // Enable or disable cube interaction (drag/rotate)
+  setInteractionEnabled(enabled) {
+    this.interactionEnabled = enabled;
+  }
+
   _onMouseDown(event) {
-    if (this.animating) return;
+    if (this.animating || !this.interactionEnabled) return;
 
     const pos = this._getMousePos(event);
     this.dragStart = { x: pos.px, y: pos.py };

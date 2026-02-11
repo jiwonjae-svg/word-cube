@@ -6,10 +6,24 @@ import {
 } from './firebase-config.js';
 
 // ===== Admin Configuration =====
-// Add admin email addresses here
-const ADMIN_EMAILS = ['admin@wordcube.com'];
+// Fallback admin emails (used when Firestore config is unavailable)
+const FALLBACK_ADMIN_EMAILS = ['admin@wordcube.com'];
+let adminEmails = [...FALLBACK_ADMIN_EMAILS];
+
+// Load admin emails from Firestore config
+async function loadAdminEmails() {
+  try {
+    const config = await getDoc('config', 'admin');
+    if (config && Array.isArray(config.emails) && config.emails.length > 0) {
+      adminEmails = config.emails;
+    }
+  } catch (err) {
+    console.warn('[Auth] Failed to load admin config from Firestore, using fallback', err);
+  }
+}
 
 const USER_SESSION_KEY = 'wordcube_user_session';
+const REMEMBER_ME_KEY = 'wordcube_remember_me';
 
 let currentUser = null;
 let onAuthChangeCallbacks = [];
@@ -71,6 +85,9 @@ function generateUserCode() {
 // Initialize auth system
 export async function initAuth() {
   await initStorage();
+
+  // Load admin emails from Firestore
+  await loadAdminEmails();
 
   // Check for existing session
   const savedSession = loadSession();
@@ -418,22 +435,47 @@ function notifyAuthChange() {
   }
 }
 
+// Remember-me preference
+export function setRememberMe(value) {
+  if (value) {
+    localStorage.setItem(REMEMBER_ME_KEY, '1');
+  } else {
+    localStorage.removeItem(REMEMBER_ME_KEY);
+  }
+}
+
+export function getRememberMe() {
+  return localStorage.getItem(REMEMBER_ME_KEY) === '1';
+}
+
 // Session persistence
 function saveSession(user) {
   try {
-    localStorage.setItem(USER_SESSION_KEY, JSON.stringify(user));
+    const data = JSON.stringify(user);
+    if (getRememberMe()) {
+      localStorage.setItem(USER_SESSION_KEY, data);
+    } else {
+      sessionStorage.setItem(USER_SESSION_KEY, data);
+    }
   } catch (e) {}
 }
 
 function loadSession() {
   try {
-    const data = localStorage.getItem(USER_SESSION_KEY);
-    return data ? JSON.parse(data) : null;
+    // Check both storages — localStorage for remember-me, sessionStorage for session-only
+    const localData = localStorage.getItem(USER_SESSION_KEY);
+    if (localData) return JSON.parse(localData);
+    const sessionData = sessionStorage.getItem(USER_SESSION_KEY);
+    if (sessionData) return JSON.parse(sessionData);
+    return null;
   } catch { return null; }
 }
 
 function clearSession() {
-  try { localStorage.removeItem(USER_SESSION_KEY); } catch {}
+  try {
+    localStorage.removeItem(USER_SESSION_KEY);
+    sessionStorage.removeItem(USER_SESSION_KEY);
+  } catch {}
 }
 
 // ===== IP-based Country Detection =====
@@ -472,7 +514,7 @@ export async function detectCountryFromIP() {
 // ===== Admin Check =====
 export function isAdmin(user) {
   if (!user) return false;
-  return ADMIN_EMAILS.includes(user.email);
+  return adminEmails.includes(user.email);
 }
 
 // ===== Activity Logging =====

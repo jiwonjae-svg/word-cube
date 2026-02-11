@@ -6,7 +6,7 @@ import { generatePuzzle, findWordsOnFaces } from './words.js';
 import { setDoc, getDoc, queryCollection, generateId, getServerTime } from './firebase-config.js';
 import { getCurrentUser } from './auth.js';
 
-const SESSION_KEY = 'wordcube_game_session';
+const SESSION_KEY_PREFIX = 'wordcube_game_session';
 
 export class Game {
   constructor() {
@@ -19,6 +19,7 @@ export class Game {
     this.state = 'idle';           // idle, playing, complete
     this.seed = 0;
     this.startServerTime = 0;
+    this._userId = null;
 
     // UI references
     this.containerEl = null;
@@ -31,11 +32,28 @@ export class Game {
     this.onMoveHistoryChange = null;
   }
 
+  // Get per-user session key
+  _getSessionKey() {
+    const userId = this._userId || getCurrentUser()?.id || 'anonymous';
+    return `${SESSION_KEY_PREFIX}_${userId}`;
+  }
+
+  // Set user ID for per-user session storage
+  setUserId(userId) {
+    this._userId = userId;
+    // Also update timer session key
+    this.timer.setSessionKey(`wordcube_timer_state_${userId}`);
+  }
+
   // Initialize with DOM elements
   init(containerEl, wordListEl, timerEl) {
     this.containerEl = containerEl;
     this.wordListEl = wordListEl;
     this.timerEl = timerEl;
+
+    // Set user ID for per-user session keys
+    const user = getCurrentUser();
+    if (user) this.setUserId(user.id);
 
     // Timer update callback (throttled session save)
     this._lastSessionSave = 0;
@@ -342,18 +360,18 @@ export class Game {
         startServerTime: this.startServerTime,
         timestamp: Date.now()
       };
-      localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+      localStorage.setItem(this._getSessionKey(), JSON.stringify(data));
     } catch (e) {}
   }
 
   _clearSession() {
-    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    try { localStorage.removeItem(this._getSessionKey()); } catch (e) {}
   }
 
   // Try to restore a previous game session
   async tryRestore() {
     try {
-      const raw = localStorage.getItem(SESSION_KEY);
+      const raw = localStorage.getItem(this._getSessionKey());
       if (!raw) return false;
 
       const data = JSON.parse(raw);

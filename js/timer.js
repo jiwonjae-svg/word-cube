@@ -16,6 +16,11 @@ export class GameTimer {
     this._sessionKey = 'wordcube_timer_state';
   }
 
+  // Set per-user session key
+  setSessionKey(key) {
+    this._sessionKey = key;
+  }
+
   // Initialize with server time for sync
   // In offline mode, serverNow = Date.now()
   start(serverNow = null) {
@@ -47,6 +52,12 @@ export class GameTimer {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
     }
+  }
+
+  unpause() {
+    if (!this.running || !this.paused) return;
+    this.paused = false;
+    this._tick();
   }
 
   stop(clearSession = true) {
@@ -131,9 +142,9 @@ export class GameTimer {
   }
 
   // Try to restore from session
-  static tryRestore() {
+  static tryRestore(sessionKey = 'wordcube_timer_state') {
     try {
-      const data = localStorage.getItem('wordcube_timer_state');
+      const data = localStorage.getItem(sessionKey);
       if (!data) return null;
       const state = JSON.parse(data);
       // Only restore if saved within last 30 minutes

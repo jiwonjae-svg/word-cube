@@ -280,6 +280,26 @@ select.glass-input {
   margin-top: 6px;
 }
 
+/* ===== Remember Me ===== */
+.remember-me-group {
+  margin: -4px 0 8px;
+}
+.remember-me-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-light);
+  cursor: pointer;
+  user-select: none;
+}
+.remember-me-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 /* ===== Forgot Password Link ===== */
 .forgot-password-link {
   display: block;
@@ -615,6 +635,71 @@ select.glass-input {
   animation: fadeIn 0.4s ease-out;
 }
 .game-complete-overlay.hidden { display: none; }
+
+/* ===== Resume Game Overlay ===== */
+.resume-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 55;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background: rgba(15, 23, 42, 0.45);
+  transition: backdrop-filter 1.5s ease-out, -webkit-backdrop-filter 1.5s ease-out, background 1.5s ease-out;
+}
+.resume-overlay.hidden { display: none; }
+.resume-overlay.fading {
+  backdrop-filter: blur(0px);
+  -webkit-backdrop-filter: blur(0px);
+  background: rgba(15, 23, 42, 0);
+  pointer-events: none;
+}
+.resume-content {
+  text-align: center;
+  padding: 48px 56px;
+  background: var(--glass-bg-solid);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  animation: popIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+}
+.resume-overlay.fading .resume-content {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.resume-content h2 {
+  font-size: 24px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.resume-content p {
+  color: var(--text-light);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+.resume-btn-pulse {
+  animation: resumePulse 2s ease-in-out infinite;
+}
+@keyframes resumePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0); }
+}
+
+/* Cube section blur state */
+.cube-section.blurred #cube-container {
+  filter: blur(12px);
+  transition: filter 1.5s ease-out;
+}
+.cube-section.unblurring #cube-container {
+  filter: blur(0px);
+  transition: filter 1.5s ease-out;
+}
 .complete-card {
   text-align: center;
   padding: 48px 56px;
