@@ -15,6 +15,7 @@ let selectedCubeSize = null;
 let currentPage = 'login';
 let gamePageInitialized = false;
 let leaderboardMode = 'daily'; // 'daily' or 'alltime'
+let verifyPollInterval = null;
 
 // ===== DOM References =====
 const $ = (id) => document.getElementById(id);
@@ -157,6 +158,27 @@ async function handleEmailVerificationFromURL() {
   }
 }
 
+// ===== Email Verification Polling =====
+function startVerificationPolling() {
+  stopVerificationPolling();
+  verifyPollInterval = setInterval(async () => {
+    const verified = await reloadCurrentUser();
+    if (verified) {
+      stopVerificationPolling();
+      showToast('Email verified! Logging in...', 'success');
+      const user = getCurrentUser();
+      if (user) handleAuthChange(user);
+    }
+  }, 3000); // Check every 3 seconds
+}
+
+function stopVerificationPolling() {
+  if (verifyPollInterval) {
+    clearInterval(verifyPollInterval);
+    verifyPollInterval = null;
+  }
+}
+
 // ===== Auth State Handler =====
 function handleAuthChange(user) {
   if (user) {
@@ -164,8 +186,10 @@ function handleAuthChange(user) {
     if (!isEmailVerified() && user.providerData?.[0]?.providerId !== 'google.com') {
       $('verify-email-address').textContent = user.email || '';
       showPage('verify');
+      startVerificationPolling();
       return;
     }
+    stopVerificationPolling();
     showPage('game');
     updateProfileDisplay(user);
 
@@ -970,32 +994,6 @@ function setupModalEvents() {
     closeAllModals();
   });
 
-  // Verify email modal - "I've Verified My Email" button
-  // (removed: now handled by verify page's Back to Login button)
-
-  // Verify email page - "I've Verified My Email" button
-  $('verify-check-btn').addEventListener('click', async () => {
-    const btn = $('verify-check-btn');
-    btn.disabled = true;
-    btn.textContent = 'Checking...';
-
-    const verified = await reloadCurrentUser();
-
-    btn.disabled = false;
-    btn.textContent = "I've Verified My Email";
-
-    if (verified) {
-      showToast('Email verified! Logging in...', 'success');
-      // Re-trigger auth change to proceed to game page
-      const user = getCurrentUser();
-      if (user) {
-        handleAuthChange(user);
-      }
-    } else {
-      showToast('Email not yet verified. Please check your inbox and click the verification link.', 'error');
-    }
-  });
-
   // Verify email page - "Resend Email" button
   $('verify-email-resend-btn').addEventListener('click', async () => {
     const btn = $('verify-email-resend-btn');
@@ -1016,6 +1014,7 @@ function setupModalEvents() {
 
   // Verify email page - "Back to Login" button
   $('verify-back-login-btn').addEventListener('click', async () => {
+    stopVerificationPolling();
     await logout();
     showPage('login');
   });

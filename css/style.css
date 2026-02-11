@@ -1,4 +1,6 @@
 /* ===== CSS Variables ===== */
+@keyframes spin { to { transform: rotate(360deg); } }
+
 :root {
   --glass-bg: rgba(255, 255, 255, 0.25);
   --glass-bg-solid: rgba(255, 255, 255, 0.6);

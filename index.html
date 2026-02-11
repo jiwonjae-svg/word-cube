@@ -109,8 +109,11 @@
       <div class="auth-form" style="text-align:center;">
         <p style="color:var(--text-light);font-size:14px;line-height:1.7;margin-bottom:16px;">A verification email has been sent to:</p>
         <p id="verify-email-address" style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:20px;word-break:break-all;"></p>
-        <p style="color:var(--text-light);font-size:13px;line-height:1.6;margin-bottom:24px;">Please click the link in the email to verify your account. Once verified, you can log in.</p>
-        <button id="verify-check-btn" class="glass-btn primary-btn" style="margin-bottom:12px;">I've Verified My Email</button>
+        <p style="color:var(--text-light);font-size:13px;line-height:1.6;margin-bottom:24px;">Please click the link in the email to verify your account. Once verified, you'll be logged in automatically.</p>
+        <div id="verify-spinner" style="margin-bottom:16px;">
+          <div class="spinner" style="width:32px;height:32px;border:3px solid var(--glass-border);border-top-color:var(--primary);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>
+          <p style="color:var(--text-light);font-size:12px;margin-top:8px;">Waiting for verification...</p>
+        </div>
         <button id="verify-email-resend-btn" class="glass-btn secondary-btn" style="margin-bottom:12px;">Resend Email</button>
         <button id="verify-back-login-btn" class="glass-btn secondary-btn">Back to Login</button>
       </div>
