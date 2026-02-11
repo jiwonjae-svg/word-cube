@@ -409,7 +409,7 @@ function setupAuthEvents() {
     }
 
     if (!privacyAgreed) {
-      showToast('개인정보 처리방침에 동의해주세요.', 'error');
+      showToast('Please agree to the Privacy Policy.', 'error');
       return;
     }
 
