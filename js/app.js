@@ -791,8 +791,8 @@ function updateProfileDisplay(user) {
   if (display) {
     const flag = countryFlag(user.country);
     const avatarImg = user.avatar
-      ? `<img src="${user.avatar}" alt="" class="profile-avatar-mini" onerror="this.style.display='none'">`
-      : '';
+      ? `<img src="${user.avatar}" alt="" class="profile-avatar-mini" onerror="this.src='assets/empty_profile_img.png'">`
+      : `<img src="assets/empty_profile_img.png" alt="" class="profile-avatar-mini">`;
     display.innerHTML = `${flag} ${avatarImg}${sanitize(user.name || 'Player')} #${sanitize(user.code || '00000000')}`;
   }
 }

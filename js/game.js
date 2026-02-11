@@ -336,6 +336,7 @@ export class Game {
         targetWords: this.targetWords,
         foundWords: Object.fromEntries(this.foundWords),
         faceGrids: this.cube ? this.cube.getFaceGrids() : null,
+        tileRotations: this.cube ? this.cube.getTileRotations() : null,
         moveHistory: this.cube ? this.cube.moveHistory : [],
         orbitQuaternion: this.cube ? this.cube.getOrbitQuaternion() : null,
         startServerTime: this.startServerTime,
@@ -376,6 +377,10 @@ export class Game {
 
       if (data.faceGrids) {
         this.cube.setFaceGrids(data.faceGrids);
+      }
+      // Restore in-plane tile rotations (must be after setFaceGrids)
+      if (data.tileRotations) {
+        this.cube.setTileRotations(data.tileRotations);
       }
       if (data.moveHistory) {
         this.cube.moveHistory = data.moveHistory;

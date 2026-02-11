@@ -177,6 +177,48 @@ export class WordCube {
     }
   }
 
+  // Get in-plane rotation angles for all tiles (6 faces, each NxN)
+  // Returns array of [face][row][col] = snapped angle in radians (0, pi/2, pi, -pi/2)
+  getTileRotations() {
+    const rotations = [];
+    for (let f = 0; f < 6; f++) {
+      rotations[f] = [];
+      for (let r = 0; r < this.n; r++) {
+        rotations[f][r] = new Array(this.n).fill(0);
+      }
+    }
+    for (const t of this.tileMeshes) {
+      const f = t.faceIdx;
+      const r = t.row;
+      const c = t.col;
+      const canonQuat = this._getTilePosition(f, 0, 0).quaternion;
+      const canonX = new THREE.Vector3(1, 0, 0).applyQuaternion(canonQuat);
+      const canonY = new THREE.Vector3(0, 1, 0).applyQuaternion(canonQuat);
+      const tileX = new THREE.Vector3(1, 0, 0).applyQuaternion(t.mesh.quaternion);
+      const dotX = tileX.dot(canonX);
+      const dotY = tileX.dot(canonY);
+      const angle = Math.atan2(dotY, dotX);
+      const snappedAngle = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+      rotations[f][r][c] = snappedAngle;
+    }
+    return rotations;
+  }
+
+  // Apply saved in-plane rotation angles to tiles after rebuild
+  setTileRotations(rotations) {
+    if (!rotations) return;
+    for (const t of this.tileMeshes) {
+      const angle = rotations[t.faceIdx]?.[t.row]?.[t.col];
+      if (angle && angle !== 0) {
+        const canonQuat = this._getTilePosition(t.faceIdx, 0, 0).quaternion;
+        const inPlaneRot = new THREE.Quaternion().setFromAxisAngle(
+          new THREE.Vector3(0, 0, 1), angle
+        );
+        t.mesh.quaternion.copy(canonQuat.clone().multiply(inPlaneRot));
+      }
+    }
+  }
+
   // Create a high-resolution canvas texture for a tile letter
   _createTileTexture(letter, isHighlighted = false, glowColor = '#00ffd5') {
     const cacheKey = isHighlighted ? `${letter}_glow_${glowColor}` : letter;
