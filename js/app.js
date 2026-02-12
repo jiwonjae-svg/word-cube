@@ -89,6 +89,18 @@ const gamePage = $('game-page');
 
 // ===== Initialize =====
 async function init() {
+  // Pre-check: if remember-me is on and a session exists, show game page immediately
+  // to avoid briefly flashing the login page
+  if (getRememberMe()) {
+    try {
+      const savedData = localStorage.getItem('wordcube_user_session');
+      if (savedData) {
+        loginPage.classList.remove('active');
+        gamePage.classList.add('active');
+      }
+    } catch {}
+  }
+
   // Init auth (and storage)
   await initAuth();
 
@@ -510,6 +522,8 @@ function setupGameEvents() {
     await game.beginScramble();
     $('new-game-btn').style.display = '';
     $('mobile-new-game-btn').style.display = '';
+    $('pause-game-btn').style.display = '';
+    $('mobile-pause-game-btn').style.display = '';
     updateLeaderboard(selectedCubeSize);
     $('leaderboard-size').innerHTML = `Cube: ${selectedCubeSize}&times;${selectedCubeSize}`;
     if ($('mobile-leaderboard-size')) {
@@ -522,6 +536,8 @@ function setupGameEvents() {
     $('size-selector').classList.remove('hidden');
     $('new-game-btn').style.display = 'none';
     $('mobile-new-game-btn').style.display = 'none';
+    $('pause-game-btn').style.display = 'none';
+    $('mobile-pause-game-btn').style.display = 'none';
     selectedCubeSize = null;
     updateSizeSelection();
   });
@@ -555,6 +571,25 @@ function setupGameEvents() {
     }, 1500);
   });
 
+  // Pause game button
+  const pauseGameAction = () => {
+    if (!game || game.state !== 'playing') return;
+
+    // Pause timer and disable cube interaction
+    game.timer.pause();
+    if (game.cube) game.cube.setInteractionEnabled(false);
+
+    // Save session before pausing
+    game._saveSession();
+
+    // Blur cube and show resume overlay
+    const cubeSection = document.querySelector('.cube-section');
+    if (cubeSection) cubeSection.classList.add('blurred');
+    $('resume-overlay').classList.remove('hidden');
+  };
+  $('pause-game-btn').addEventListener('click', pauseGameAction);
+  $('mobile-pause-game-btn').addEventListener('click', pauseGameAction);
+
   // Undo / Redo buttons (desktop + mobile)
   const undoAction = () => { if (game) game.undo(); };
   const redoAction = () => { if (game) game.redo(); };
@@ -570,9 +605,19 @@ function setupGameEvents() {
 
   $('newgame-confirm-btn').addEventListener('click', () => {
     closeAllModals();
+    // Hide resume overlay if visible
+    $('resume-overlay').classList.add('hidden');
+    $('resume-overlay').classList.remove('fading');
+    const cubeSection = document.querySelector('.cube-section');
+    if (cubeSection) {
+      cubeSection.classList.remove('blurred');
+      cubeSection.classList.remove('unblurring');
+    }
     if (game) { game.destroy(); game = null; }
     $('new-game-btn').style.display = 'none';
     $('mobile-new-game-btn').style.display = 'none';
+    $('pause-game-btn').style.display = 'none';
+    $('mobile-pause-game-btn').style.display = 'none';
     $('undo-btn').disabled = true;
     $('redo-btn').disabled = true;
     $('mobile-undo-btn').disabled = true;
@@ -759,6 +804,8 @@ async function initGamePage() {
     $('size-selector').classList.add('hidden');
     $('new-game-btn').style.display = '';
     $('mobile-new-game-btn').style.display = '';
+    $('pause-game-btn').style.display = '';
+    $('mobile-pause-game-btn').style.display = '';
     $('leaderboard-size').innerHTML = `Cube: ${selectedCubeSize}&times;${selectedCubeSize}`;
     updateLeaderboard(selectedCubeSize);
 

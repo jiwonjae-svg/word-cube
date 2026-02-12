@@ -358,6 +358,7 @@ export class Game {
         moveHistory: this.cube ? this.cube.moveHistory : [],
         orbitQuaternion: this.cube ? this.cube.getOrbitQuaternion() : null,
         startServerTime: this.startServerTime,
+        elapsedSeconds: this.timer.getElapsedSeconds(),
         timestamp: Date.now()
       };
       localStorage.setItem(this._getSessionKey(), JSON.stringify(data));
@@ -416,8 +417,11 @@ export class Game {
       this._applySettings();
       this._renderWordList();
 
-      // Restore timer using saved start time (always resume, never restart)
-      this.timer.resume(this.startServerTime, 0);
+      // Restore timer from saved elapsed time (prevents counting time away)
+      const savedElapsed = data.elapsedSeconds || 0;
+      const adjustedStartTime = Date.now() - (savedElapsed * 1000);
+      this.startServerTime = adjustedStartTime;
+      this.timer.resume(adjustedStartTime, 0);
 
       // Check current words
       this._checkWords(this.cube.getFaceGrids());
