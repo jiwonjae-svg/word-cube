@@ -213,6 +213,16 @@ select.glass-input {
   background: rgba(255,255,255,0.35);
 }
 
+.danger-btn {
+  background: linear-gradient(135deg, var(--danger), #f87171);
+  color: #fff;
+  border-color: transparent;
+}
+.danger-btn:hover {
+  background: linear-gradient(135deg, #dc2626, var(--danger));
+  box-shadow: 0 4px 20px rgba(239,68,68,0.35);
+}
+
 .google-btn {
   display: flex;
   align-items: center;

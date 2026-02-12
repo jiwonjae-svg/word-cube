@@ -317,6 +317,61 @@ export async function logout() {
   notifyAuthChange();
 }
 
+// Delete user account (requires password re-authentication)
+export async function deleteAccount(password) {
+  if (!currentUser) return { success: false, error: 'Not logged in' };
+
+  if (getIsOnline() && getFirebaseAuth()) {
+    try {
+      const { EmailAuthProvider, reauthenticateWithCredential, deleteUser } = await import('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js');
+      const user = getFirebaseAuth().currentUser;
+      if (!user) return { success: false, error: 'No authenticated user' };
+
+      // Re-authenticate before deletion
+      const credential = EmailAuthProvider.credential(user.email, password);
+      await reauthenticateWithCredential(user, credential);
+
+      // Delete user data from Firestore
+      const userId = currentUser.id;
+      try {
+        // We can't delete docs from client without knowing IDs,
+        // but we can delete the user profile
+        await setDoc('users', userId, { deleted: true, deletedAt: Date.now() });
+      } catch (err) {
+        console.warn('[Auth] Failed to mark user data as deleted', err);
+      }
+
+      // Delete Firebase Auth account
+      await deleteUser(user);
+
+      // Clear local state
+      currentUser = null;
+      clearSession();
+      localStorage.removeItem(REMEMBER_ME_KEY);
+      notifyAuthChange();
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: friendlyError(err.message) };
+    }
+  }
+
+  // Offline deletion
+  const existingUsers = JSON.parse(localStorage.getItem('wordcube_offline_users') || '[]');
+  const hashedPw = await hashPassword(password);
+  const userIdx = existingUsers.findIndex(u => u.id === currentUser.id && u.password === hashedPw);
+  if (userIdx === -1) {
+    return { success: false, error: 'Incorrect password' };
+  }
+  existingUsers.splice(userIdx, 1);
+  localStorage.setItem('wordcube_offline_users', JSON.stringify(existingUsers));
+
+  currentUser = null;
+  clearSession();
+  localStorage.removeItem(REMEMBER_ME_KEY);
+  notifyAuthChange();
+  return { success: true };
+}
+
 // Update user profile
 export async function updateProfile(updates) {
   if (!currentUser) return { success: false, error: 'Not logged in' };

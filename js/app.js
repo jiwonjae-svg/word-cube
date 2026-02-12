@@ -1,6 +1,6 @@
 // app.js - Main entry point: routing, UI events, and page management
 
-import { initAuth, login, register, loginWithGoogle, handleGoogleRedirect, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists, sendPasswordReset, sendVerificationEmail, isEmailVerified, reloadCurrentUser, applyEmailVerificationCode, isAdmin, logActivity, startPresence, stopPresence, getOnlineUsers, postAnnouncement, getLatestAnnouncement, getActivityLogs, setRememberMe, getRememberMe } from './auth.js';
+import { initAuth, login, register, loginWithGoogle, handleGoogleRedirect, logout, onAuthChange, getCurrentUser, updateProfile, checkEmailExists, sendPasswordReset, sendVerificationEmail, isEmailVerified, reloadCurrentUser, applyEmailVerificationCode, isAdmin, logActivity, startPresence, stopPresence, getOnlineUsers, postAnnouncement, getLatestAnnouncement, getActivityLogs, setRememberMe, getRememberMe, deleteAccount } from './auth.js';
 import { Game } from './game.js';
 import { GameTimer } from './timer.js';
 import { BackgroundCubes } from './cube.js';
@@ -955,6 +955,44 @@ function setupProfileEvents() {
       closeAllModals();
     } else {
       showToast('Failed to update profile', 'error');
+    }
+  });
+
+  // Delete account button (opens confirmation modal)
+  $('delete-account-btn').addEventListener('click', () => {
+    closeAllModals();
+    $('delete-account-password').value = '';
+    showModal('delete-account-modal');
+  });
+
+  $('delete-account-cancel-btn').addEventListener('click', () => {
+    closeAllModals();
+  });
+
+  $('delete-account-confirm-btn').addEventListener('click', async () => {
+    const password = $('delete-account-password').value;
+    if (!password) {
+      showToast('Please enter your password', 'error');
+      return;
+    }
+
+    const btn = $('delete-account-confirm-btn');
+    btn.disabled = true;
+    btn.textContent = 'Deleting...';
+
+    const result = await deleteAccount(password);
+
+    btn.disabled = false;
+    btn.textContent = 'Delete Account';
+
+    if (result.success) {
+      closeAllModals();
+      if (game) { game.destroy(); game = null; }
+      gamePageInitialized = false;
+      showToast('Account deleted successfully.', 'success');
+      showPage('login');
+    } else {
+      showToast(result.error || 'Failed to delete account', 'error');
     }
   });
 }

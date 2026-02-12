@@ -11,6 +11,7 @@ export class GameTimer {
     this.rafId = null;
     this.lastRawTime = 0;      // For lerp anti-jump
     this.lerpFactor = 0.1;     // Smoothing factor for time corrections
+    this._pausedAt = 0;        // Timestamp when pause() was called
 
     // Session persistence
     this._sessionKey = 'wordcube_timer_state';
@@ -48,6 +49,7 @@ export class GameTimer {
 
   pause() {
     this.paused = true;
+    this._pausedAt = Date.now();
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -56,6 +58,13 @@ export class GameTimer {
 
   unpause() {
     if (!this.running || !this.paused) return;
+    // Shift startTime forward by the duration spent paused
+    // so paused time is not counted as elapsed
+    if (this._pausedAt > 0) {
+      const pausedDuration = Date.now() - this._pausedAt;
+      this.startTime += pausedDuration;
+      this._pausedAt = 0;
+    }
     this.paused = false;
     this._tick();
   }

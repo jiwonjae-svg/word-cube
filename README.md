@@ -41,13 +41,17 @@ Perfect for:
 - **Timer with Server Sync**: High-precision timer using server time to prevent manipulation
 - **Leaderboard**: Daily (UTC) and all-time rankings per cube size
 - **Session Persistence**: Crash recovery restores your game state automatically
+- **Per-User Sessions**: Game state is isolated per account — no data leaks between users
 - **Firebase + Offline**: Uses Firebase Auth & Firestore when configured; falls back to localStorage
+- **Admin via Firestore**: Admin emails loaded from Firestore `config/admin` document
 
 ### 👤 User System
 - **Email & Google Auth**: Register with email/password or Google sign-in
 - **Email Verification**: Firebase email verification for new accounts
 - **Password Reset**: Self-service password reset via email
+- **Remember Me**: Auto-login option to skip the login screen on return
 - **User Profiles**: Editable name, avatar, and country with flag display
+- **Account Deletion**: Self-service account deletion with password confirmation
 - **Play History**: Track all past games with dates and times
 
 ### 🎨 User Experience
@@ -56,6 +60,8 @@ Perfect for:
 - **Welcome Onboarding**: First-time user welcome modal with quick tips
 - **Configurable Controls**: Rotation sensitivity & invert toggle
 - **Mobile Panels**: Slide-up word list and ranking panels
+- **Pause & Resume**: Pause your game anytime; resume with a cinematic blur transition
+- **Session Persistence**: Per-user game state saved to localStorage across browser restarts
 
 ## 📦 Installation
 
@@ -66,8 +72,8 @@ Perfect for:
 
 ```powershell
 # Clone the repository
-git clone https://github.com/yourusername/word-cube.git
-cd word-cube
+git clone https://github.com/jiwonjae-svg/word-snake.git
+cd word-snake
 
 # Install dependencies
 npm install
@@ -136,7 +142,10 @@ Project-Word/
 │   └── words.js                     # Word dictionary & puzzle generation
 │
 ├── 📁 assets/                       # Static Assets
-│   └── logo.png                     # Application logo
+│   ├── logo.png                     # Application logo
+│   ├── empty_profile_img.png        # Default avatar placeholder
+│   ├── settings_btn.png             # Settings button icon
+│   └── help_btn.png                 # Help button icon
 │
 └── 📁 favicon/                      # Favicon & PWA Icons
     ├── favicon.ico                  # Classic favicon
@@ -188,6 +197,8 @@ Word Cube follows a **modular ES module architecture** with clear separation of 
 #### 🔐 Auth (auth.js)
 - **Multi-Provider**: Email/password + Google sign-in
 - **Email Verification**: Firebase email verification flow
+- **Account Deletion**: Re-authentication + Firebase `deleteUser()`
+- **Remember Me**: Session in `localStorage` (persistent) or `sessionStorage` (tab-only)
 - **Friendly Errors**: Maps Firebase error codes to user-readable messages
 - **Offline Fallback**: Full functionality without Firebase configuration
 
@@ -285,14 +296,19 @@ Contributions welcome! Please follow these guidelines:
 
 ### Development Setup
 ```powershell
-git clone https://github.com/yourusername/word-cube.git
-cd word-cube
+git clone https://github.com/jiwonjae-svg/word-snake.git
+cd word-snake
 npm install
 npm run dev
 ```
 
 ## 🎯 Roadmap
 
+- [x] Pause & Resume game with blur transition
+- [x] Per-user session isolation
+- [x] Remember Me / Auto-login
+- [x] Account deletion
+- [x] Admin panel with Firestore config
 - [ ] Multi-language support (English, Korean, Japanese)
 - [ ] Custom word lists
 - [ ] Multiplayer mode

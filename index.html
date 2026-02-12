@@ -363,6 +363,30 @@
           <div id="edit-country-display" class="glass-input" style="opacity:0.7;cursor:default;"></div>
         </div>
         <button id="save-profile-btn" class="glass-btn primary-btn">Save</button>
+        <hr style="border:none;border-top:1px solid var(--glass-border);margin:20px 0 12px;">
+        <button id="delete-account-btn" class="glass-btn danger-btn">Delete Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Account Confirmation Modal -->
+  <div id="delete-account-modal" class="modal hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-content glass-panel" style="max-width:400px;">
+      <div class="modal-header">
+        <h2 style="color:var(--danger);">Delete Account</h2>
+        <button class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-light);font-size:14px;line-height:1.6;margin-bottom:16px;">This action is <strong>permanent</strong> and cannot be undone. All your data, scores, and game history will be deleted.</p>
+        <p style="color:var(--text-light);font-size:13px;margin-bottom:12px;">Please enter your password to confirm:</p>
+        <div class="input-group">
+          <input type="password" id="delete-account-password" class="glass-input" placeholder="Enter your password" maxlength="128">
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;">
+          <button id="delete-account-cancel-btn" class="glass-btn secondary-btn" style="flex:1;">Cancel</button>
+          <button id="delete-account-confirm-btn" class="glass-btn danger-btn" style="flex:1;">Delete Account</button>
+        </div>
       </div>
     </div>
   </div>
